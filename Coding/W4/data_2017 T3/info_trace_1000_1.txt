@@ -1,0 +1,17 @@
+{ 'Info': { 'Assumption': '1) Standard H2O g(r), no mention from JPL on model, '
+                          '2) Covariance DT not used (but is sampled)',
+            'Body': 'C/2017 T3 (ATLAS)',
+            'CPU_time': 1096.376352124993,
+            'Covar_labels': ['e', 'q', 'tp', 'node', 'peri', 'i', 'A1', 'A2'],
+            'Data': 'https://ssd-api.jpl.nasa.gov/sbdb_query.api',
+            'Filter': '{"AND":["q|RG|0.80|1.20", "A1|DF", "A2|DF"]}',
+            'Int': 'trace',
+            'N_clones': 1000,
+            'Perturbations': {'NBP': False, 'NGA': True, 'Rel': True},
+            'Requester': { 'fields': 'spkid',
+                           'sb-cdata': '{"AND":["q|RG|0.80|1.20", "A1|DF", '
+                                       '"A2|DF"]}',
+                           'sb-class': 'HYP'},
+            'classes': ['COM', 'PAR', 'HYP'],
+            'dt': 1.0,
+            'perturbing_bodies': [None]}}

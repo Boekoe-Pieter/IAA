@@ -1,0 +1,12 @@
+*.pkl
+*.bsp
+*.png
+*.pdf
+*.pptx
+pkl_files
+Spice_files
+Pedro Lacerda
+.csv
+els-cas-templates
+dump
+
