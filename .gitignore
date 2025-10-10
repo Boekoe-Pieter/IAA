@@ -3,10 +3,12 @@
 *.png
 *.pdf
 *.pptx
+*.csv
+*.json
+*.zip
+*.txt
 pkl_files
 Spice_files
-Pedro Lacerda
-.csv
 els-cas-templates
 dump
 

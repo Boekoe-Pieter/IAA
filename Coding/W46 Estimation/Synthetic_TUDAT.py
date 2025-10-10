@@ -335,16 +335,19 @@ for body in all_results:
     )
 
     dependent_variables_to_save = [
-                                propagation_setup.dependent_variable.relative_position("Mercury", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Venus", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Earth", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Mars", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Jupiter", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Saturn", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Uranus", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Neptune", "Sun"),
-                                propagation_setup.dependent_variable.keplerian_state(str(spkid), "Sun"),
-                                ]
+        propagation_setup.dependent_variable.relative_position("Mercury", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Venus", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Earth", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Mars", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Jupiter", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Saturn", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Uranus", "Sun"),
+        propagation_setup.dependent_variable.relative_position("Neptune", "Sun"),
+        propagation_setup.dependent_variable.keplerian_state(str(spkid), "Sun"),
+        propagation_setup.dependent_variable.central_body_fixed_cartesian_position(str(spkid), "Sun"),
+        propagation_setup.dependent_variable.relative_position(str(spkid), "Sun"),
+        propagation_setup.dependent_variable.relative_velocity(str(spkid), "Sun"),                                
+        ]
 
     propagator_settings = propagation_setup.propagator.translational(
         central_bodies=central_bodies,
@@ -371,6 +374,8 @@ for body in all_results:
 
     body_settings.get(str(spkid)).ephemeris_settings = body_ephemeris
 
+    # ----------------------------------------------------------------------
+    # Define Observatory
     # ----------------------------------------------------------------------
     "We define the LSST as our observatory, and is located in the center of the earth as we are not interested in the effect of one tellescope"
     "but the effect of N observations. Sim time is one observation per day as per LSST and noise is added as per LSST (source from Pedro Lacerda in ESTEC)"
@@ -525,7 +530,13 @@ for body in all_results:
     bodies_to_propagate = [str(spkid)]
     acceleration_settings = {}
     acceleration_settings[str(spkid)] = accelerations
-
+    
+    dependent_variables_to_save = [
+        propagation_setup.dependent_variable.central_body_fixed_cartesian_position(str(spkid), "Sun"),
+        propagation_setup.dependent_variable.relative_position(str(spkid), "Sun"),
+        propagation_setup.dependent_variable.relative_velocity(str(spkid), "Sun"),
+        ]
+    
     # create the acceleration models.
     acceleration_models = propagation_setup.create_acceleration_models(
         bodies, acceleration_settings, bodies_to_propagate, central_bodies
@@ -539,6 +550,7 @@ for body in all_results:
         initial_time=SSE_start,
         integrator_settings=integrator_settings,
         termination_settings=termination_condition,
+        output_variables=dependent_variables_to_save,
     )
 
     # ----------------------------------------------------------------------
@@ -565,7 +577,7 @@ for body in all_results:
 
         return current_custom_parameter_partial
     
-    custom_parameter = np.array([A1, A2, A3])  #JPL as Guess
+    custom_parameter = np.array([A1, A2, A3])  # JPL as Guess
 
     def get_custom_parameter():
         return custom_parameter #Get the parameter values
@@ -621,7 +633,7 @@ for body in all_results:
 
     truth_parameters = parameters_to_estimate.parameter_vector
 
-    perturbed_parameters = truth_parameters.copy( )
+    perturbed_parameters = truth_parameters.copy()
     for i in range(3):
         perturbed_parameters[i] += 1000.0
         perturbed_parameters[i+3] += 10
