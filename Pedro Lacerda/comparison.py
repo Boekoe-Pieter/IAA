@@ -100,4 +100,4 @@ for sim_folder in sorted(os.listdir(comet_path)):
 
         plt.show()
     
-    # D_traject(tudat_nominal,rebound_nominal, alpha=0.9)
+    D_traject(tudat_nominal,rebound_nominal, alpha=0.9)

@@ -71,7 +71,6 @@ for comet, data in files_dict.items():
         planets = ["Mercury", "Venus", "Earth", "Moon", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"]
 
         # sim details
-        N_time = 10000
         Integrator = "trace"
         timestep = 1
         N_samples = 1000
@@ -84,6 +83,7 @@ for comet, data in files_dict.items():
         data_to_write = {
             "Nominal_trajectory":0,
             "Nominal_trajectory_times":0,
+            "Nominal_trajectory_fit":0,
             "Monte_trajectory": {},
             "Monte_trajectory_times": {},
             "Initial_condition": 0,
@@ -101,11 +101,11 @@ for comet, data in files_dict.items():
         # Simulator
         # start_time = total_data["objects"][body]["observations"].get("earliest iso")
         start_time = covar_states["epoch"]
-        end_time = total_data["objects"][body]["elements"].get("Tp_iso")
+        end_time = total_data["objects"][body]["elements"].get("Tp_iso").replace("Z", "")
 
         start_time_MJD = time_representation.julian_day_to_modified_julian_day(start_time)
-        end_time_MJD =  Time(end_time, format='isot', scale='utc').mjd
-
+        end_time_MJD =  time_representation.julian_day_to_modified_julian_day(time_representation.seconds_since_epoch_to_julian_day(time_representation.iso_string_to_epoch(str(end_time))))
+        
         sim = Util.create_sim(primary,start_time_MJD,Integrator,timestep)
         times = np.arange(start_time_MJD, end_time_MJD+timestep, timestep)
         data_to_write['Nominal_trajectory_times'] = times
@@ -157,18 +157,38 @@ for comet, data in files_dict.items():
         
         add_clones(sim)
 
+        # ---------------------------------
+        # add fitted reference
+        def add_fit_ref(ref_sim):
+            Mx, My, Mz, Mvx, Mvy, Mvz = initial_conidtions
+            ref_sim.add(
+                m = 0.0,
+                x = Mx,
+                y = My,  
+                z = Mz,
+                vx = Mvx,
+                vy = Mvy,
+                vz = Mvz,
+                hash='0.0'
+            )
+
+        add_fit_ref(sim)
+        data_to_write["Nominal_trajectory_fit"] = np.zeros((len(times), 6))
+
         print(
             f"Integrating \n"
             f"integrator: {Integrator}\n"
             f"Samples: {N_samples}\n"
             )
-        # print(sim.status())
+
         sim.move_to_com()
         start = timer.perf_counter()
         for j, time in enumerate(times):
             sim.integrate(time)
             p_reference = sim.particles["0"]
+            p_reference_fit = sim.particles["0.0"]
             data_to_write["Nominal_trajectory"][j] = [p_reference.x*const.au, p_reference.y*const.au, p_reference.z*const.au,p_reference.vx*const.au/const.day, p_reference.vy*const.au/const.day, p_reference.vz*const.au/const.day]
+            data_to_write["Nominal_trajectory_fit"][j] = [p_reference_fit.x*const.au, p_reference_fit.y*const.au, p_reference_fit.z*const.au,p_reference_fit.vx*const.au/const.day, p_reference_fit.vy*const.au/const.day, p_reference_fit.vz*const.au/const.day]
             for idx in range(1, N_samples+1):
                 p_clone = sim.particles[f"{idx}"]
                 data_to_write["Monte_trajectory"][idx][j] = [p_clone.x*const.au, p_clone.y*const.au, p_clone.z*const.au,p_clone.vx*const.au/const.day, p_clone.vy*const.au/const.day, p_clone.vz*const.au/const.day]   
@@ -180,7 +200,7 @@ for comet, data in files_dict.items():
             "Covar data": covar_file[45:],
             "Full data": total_file[45:],
             "Body": body,
-            "Simulator": "TUDAT",
+            "Simulator": "Rebound",
             "Integrator": Integrator,
             "Sim_time": {
                 'Start_iso': total_data["objects"][body]["observations"].get("earliest iso"),
@@ -189,7 +209,7 @@ for comet, data in files_dict.items():
                 'Start_MJD': start_time,
                 'End_MJD': end_time,
                 }, 
-            "timestep": timestep,
+            "timestep": timestep*const.day,
             "CPU_Time": runtime,
             "N_clones": N_samples,
             "origin": 'CoM',

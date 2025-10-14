@@ -15,9 +15,7 @@ import pprint
 
 # other libraries
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import matplotlib.cm as cm
-import spiceypy as spicepy
 import os
 
 # Horizons requests
@@ -111,17 +109,16 @@ for body in all_results:
     J2000_start = "JD" + str(time_representation.seconds_since_epoch_to_julian_day(SSE_start_buffer))
     J2000_end = "JD" + str(SSE_end_buffer) #time_representation.seconds_since_epoch_to_julian_day(SSE_end_buffer))
 
-
     # NGA DATA
     A1 = target_sbdb["orbit"]["model_pars"].get("A1")
     A2 = target_sbdb["orbit"]["model_pars"].get("A2")
     A3 = target_sbdb["orbit"]["model_pars"].get("A3")
-    DT = target_sbdb["orbit"]["model_pars"].get("DT") 
+    DT = target_sbdb["orbit"]["model_pars"].get("DT")
 
     A1, A2, A3, DT = (
-        A1.value if A1 is not None else 0,
-        A2.value if A2 is not None else 0,
-        A3.value if A3 is not None else 0,
+        A1.value*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2 if A1 is not None else 0,
+        A2.value*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2 if A2 is not None else 0,
+        A3.value*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2 if A3 is not None else 0,
         DT.value if DT is not None else 0,
         )
 
@@ -200,16 +197,15 @@ for body in all_results:
     )
 
     body_settings.add_empty_settings(str(spkid))
-    # body_settings.get(str(spkid)).ephemeris_settings = environment_setup.ephemeris.direct_spice(
-    #     global_frame_origin,
-    #     global_frame_orientation,
-    #     str(spkid)
-    # )
+    body_settings.get(str(spkid)).ephemeris_settings = environment_setup.ephemeris.direct_spice(
+        global_frame_origin,
+        global_frame_orientation,
+        str(spkid)
+    )
 
     bodies = environment_setup.create_system_of_bodies(body_settings)
-
     central_bodies = [global_frame_origin]
-
+    
     # ----------------------------------------------------------------------
     # Define accelerations on the body of interest
     # ----------------------------------------------------------------------
@@ -357,22 +353,22 @@ for body in all_results:
         initial_time=SSE_start_buffer,
         integrator_settings=integrator_settings,
         termination_settings=termination_condition,
-        output_variables=dependent_variables_to_save,
+        output_variables=dependent_variables_to_save, 
     )
 
-    dynamics_simulator = simulator.create_dynamics_simulator(
+    dynamics_simulator_reference = simulator.create_dynamics_simulator(
         bodies, propagator_settings
     )
 
-    propagated_state_history = dynamics_simulator.state_history
+    propagated_state_history = dynamics_simulator_reference.state_history
 
-    body_ephemeris = environment_setup.ephemeris.tabulated(
-        propagated_state_history,
+    body_settings.get(str(spkid)).ephemeris_settings = environment_setup.ephemeris.tabulated(
+        dict(propagated_state_history),
         global_frame_origin,
         global_frame_orientation
-    )
+        )
 
-    body_settings.get(str(spkid)).ephemeris_settings = body_ephemeris
+    bodies = environment_setup.create_system_of_bodies(body_settings)
 
     # ----------------------------------------------------------------------
     # Define Observatory
@@ -431,38 +427,40 @@ for body in all_results:
     # Define accelerations on the body of interest
     # ----------------------------------------------------------------------
     "We re-define the accelerations on the comet, and redefine the NGA defenition as we now want to estimate the A1,A2,A3 parameters"
-    def NGA(time: float) -> np.ndarray:
-        state = bodies.get(str(spkid)).state
-        r_vec = state[:3]
-        v_vec = state[3:]
+    # def NGA(time: float) -> np.ndarray:
+    #     state = bodies.get(str(spkid)).state
+    #     r_vec = state[:3]
+    #     print(f"hi{r_vec}")
 
-        r_norm = np.linalg.norm(r_vec)
+    #     v_vec = state[3:]
 
-        m = 2.15
-        n = 5.093
-        k = 4.6142
-        r0 = 2.808*constants.ASTRONOMICAL_UNIT
-        alpha = 0.1113
+    #     r_norm = np.linalg.norm(r_vec)
 
-        A_vec = custom_parameter
+    #     m = 2.15
+    #     n = 5.093
+    #     k = 4.6142
+    #     r0 = 2.808*constants.ASTRONOMICAL_UNIT
+    #     alpha = 0.1113
 
-        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+    #     A_vec = custom_parameter
 
-        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+    #     g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
 
-        F_vec_rtn = g * A_vec
-        F_vec_inertial = C_rtn2eci @ F_vec_rtn
+    #     C_rtn2eci = rtn_to_eci(r_vec, v_vec)
 
-        return F_vec_inertial  
+    #     F_vec_rtn = g * A_vec
+    #     F_vec_inertial = C_rtn2eci @ F_vec_rtn
 
-    def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
-        r_hat = r_vec / np.linalg.norm(r_vec)
-        h_vec = np.cross(r_vec, v_vec)
-        h_hat = h_vec / np.linalg.norm(h_vec)
-        t_hat = np.cross(h_hat, r_hat)
+    #     return F_vec_inertial  
 
-        C = np.vstack((r_hat, t_hat, h_hat)).T
-        return C
+    # def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
+    #     r_hat = r_vec / np.linalg.norm(r_vec)
+    #     h_vec = np.cross(r_vec, v_vec)
+    #     h_hat = h_vec / np.linalg.norm(h_vec)
+    #     t_hat = np.cross(h_hat, r_hat)
+
+    #     C = np.vstack((r_hat, t_hat, h_hat)).T
+    #     return C
 
     accelerations = {
         "Sun": [
@@ -523,21 +521,34 @@ for body in all_results:
             propagation_setup.acceleration.point_mass_gravity(),
         ],
 
-        str(spkid): [
-            propagation_setup.acceleration.custom_acceleration(NGA)] 
+        # str(spkid): [
+        #     propagation_setup.acceleration.custom_acceleration(NGA)] 
         }
 
     bodies_to_propagate = [str(spkid)]
     acceleration_settings = {}
     acceleration_settings[str(spkid)] = accelerations
     
+    # create the acceleration models.
+    termination_condition = propagation_setup.propagator.time_termination(SSE_end_buffer)
+
+    integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
+            time_step = timestep_global,
+            coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
+            order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
+
+    initial_state = spice.get_body_cartesian_state_at_epoch(
+        str(spkid),
+        global_frame_origin,
+        global_frame_orientation,
+        "NONE",
+        SSE_start_buffer,
+    )
+
     dependent_variables_to_save = [
-        propagation_setup.dependent_variable.central_body_fixed_cartesian_position(str(spkid), "Sun"),
-        propagation_setup.dependent_variable.relative_position(str(spkid), "Sun"),
-        propagation_setup.dependent_variable.relative_velocity(str(spkid), "Sun"),
+        propagation_setup.dependent_variable.central_body_fixed_cartesian_position(str(spkid), "Sun"),                  
         ]
     
-    # create the acceleration models.
     acceleration_models = propagation_setup.create_acceleration_models(
         bodies, acceleration_settings, bodies_to_propagate, central_bodies
     )
@@ -547,7 +558,7 @@ for body in all_results:
         acceleration_models=acceleration_models,
         bodies_to_integrate=bodies_to_propagate,
         initial_states=initial_state,
-        initial_time=SSE_start,
+        initial_time=SSE_start_buffer,
         integrator_settings=integrator_settings,
         termination_settings=termination_condition,
         output_variables=dependent_variables_to_save,
@@ -557,51 +568,50 @@ for body in all_results:
     # Define the parameters to be estimated
     # ----------------------------------------------------------------------
     "Here we define the parameters to be estimated,the initial state and NGAs A1,A2,A3"
-    def compute_current_custom_parameter_partial() -> np.ndarray:
-        state = bodies.get(str(spkid)).state
-        r_vec = state[:3]
-        v_vec = state[3:]
+    # def compute_current_custom_parameter_partial(time, state):
+    #     r_vec = state[:3]
+    #     v_vec = state[3:]
+    #     r_norm = np.linalg.norm(r_vec)
 
-        r_norm = np.linalg.norm(r_vec)
+    #     m = 2.15
+    #     n = 5.093
+    #     k = 4.6142
+    #     r0 = 2.808*constants.ASTRONOMICAL_UNIT
+    #     alpha = 0.1113
 
-        m = 2.15
-        n = 5.093
-        k = 4.6142
-        r0 = 2.808*constants.ASTRONOMICAL_UNIT
-        alpha = 0.1113
+    #     g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+    #     C_rtn2eci = rtn_to_eci(r_vec, v_vec)
 
-        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
-        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+    #     current_custom_parameter_partial = g * C_rtn2eci  
 
-        current_custom_parameter_partial = g * C_rtn2eci  
-
-        return current_custom_parameter_partial
+    #     return current_custom_parameter_partial
     
-    custom_parameter = np.array([A1, A2, A3])  # JPL as Guess
+    # custom_parameter = np.array([A1, A2, A3])  # JPL as Guess
 
-    def get_custom_parameter():
-        return custom_parameter #Get the parameter values
+    # def get_custom_parameter():
+    #     return custom_parameter #Get the parameter values
 
-    def set_custom_parameter(estimated_value):
-        global custom_parameter
-        custom_parameter = np.array(estimated_value)  #Update the guess
+    # def set_custom_parameter(estimated_value):
+    #     global custom_parameter
+    #     custom_parameter = np.array(estimated_value)  #Update the guess
 
     parameter_settings = parameters_setup.initial_states(propagator_settings, bodies)
     
-    parameter_settings.append(
-        parameters_setup.custom_parameter(
-            'NGA', 3, get_custom_parameter,
-            set_custom_parameter
-        )
-    )
+    # parameter_settings.append(
+    #     parameters_setup.custom_parameter(
+    #         'NGA', 3, get_custom_parameter,
+    #         set_custom_parameter
+    #     )
+    # )
 
-    parameter_settings[-1].custom_partial_settings = [
-        parameters_setup.custom_analytical_partial(
-            compute_current_custom_parameter_partial(),
-            str(spkid), str(spkid),
-            propagation_setup.acceleration.AvailableAcceleration.custom_acceleration_type
-        )
-    ]
+    # parameter_settings[-1].custom_partial_settings = [
+    #     parameters_setup.custom_analytical_partial(
+    #         compute_current_custom_parameter_partial,
+    #         str(spkid),
+    #         str(spkid),
+    #         propagation_setup.acceleration.AvailableAcceleration.custom_acceleration_type
+    #     )
+    # ]
 
     parameters_to_estimate = parameters_setup.create_parameter_set(
         parameter_settings, bodies, propagator_settings
@@ -769,7 +779,7 @@ for body in all_results:
 
     # ----------------------------------------------------------------------
     # 3D Plot
-    dep_hist = dynamics_simulator.propagation_results.dependent_variable_history
+    dep_hist = dynamics_simulator_reference.propagation_results.dependent_variable_history
 
     epochs = np.array(list(dep_hist.keys()))
     dep_vals = np.vstack(list(dep_hist.values()))/constants.ASTRONOMICAL_UNIT
@@ -783,7 +793,7 @@ for body in all_results:
     uranus_pos  = dep_vals[:, 18:21]
     neptune_pos = dep_vals[:, 21:24]
 
-    state_hist = dynamics_simulator.propagation_results.state_history
+    state_hist = dynamics_simulator_reference.propagation_results.state_history
     comet_states = np.vstack(list(state_hist.values()))
     comet_pos = comet_states[:, :3]/constants.ASTRONOMICAL_UNIT
 
@@ -925,7 +935,7 @@ for body in all_results:
     D = np.sqrt(np.diag(cov_matrix))
     corr_matrix = cov_matrix / np.outer(D, D)
 
-    covar_names = ["x", "y", "z", "vx", "vy", "vz"]
+    covar_names = ["x", "y", "z", "vx", "vy", "vz"] #,"A1","A2","A3"]
 
     fig, ax = plt.subplots(figsize=(9, 7))
     im = ax.imshow(corr_matrix, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
@@ -1261,21 +1271,19 @@ for body in all_results:
         Gravityaccelerations = {
             "Sun": [
                 propagation_setup.acceleration.point_mass_gravity(),
-                propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
             ]
         }
 
         models = [Gravityaccelerations] #, NGAaccelerations]
 
         data_to_write = {
-            "Sim_time": {
-                'Start': SSE_start,
-                'End': SSE_end,
-                }, 
-            "Traj_NGA": {},
-            "Traj_NGAf": {},
-            "mean_data": initial_state,
-            "Initial_covariance": initial_covariance,
+            "Nominal_trajectory":0,
+            "Nominal_trajectory_times":0,
+            "Monte_trajectory": {},
+            "Monte_trajectory_times": {},
+            "Initial_condition": 0,
+            "Sampled_data": 0,
+            "CPU_time_list": 0
         }
 
         for model in models:

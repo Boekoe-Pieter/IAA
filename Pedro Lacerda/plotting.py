@@ -44,7 +44,7 @@ obs_scatter = {
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
 base_path = "Pedro Lacerda/"
-comet = 'C2001Q4'
+comet = 'C2013US10'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
@@ -64,7 +64,7 @@ for sim_folder in sorted(os.listdir(comet_path)):
     # Gathering data
     Family = {
         "Nominal_norm":{},
-
+        "Fitted_norm":{},
         "Clone_norm": {},
         "Clone_Divergence": {},
         "Clone_Divergence_Norm": {},
@@ -86,6 +86,11 @@ for sim_folder in sorted(os.listdir(comet_path)):
         Nominal_trajectory = data['Nominal_trajectory']
         Nominal_pos_norm = np.linalg.norm(Nominal_trajectory[:, 0:3], axis=1)
         dict["Nominal_norm"] = Nominal_pos_norm
+
+        Nominal_trajectory_fit = data['Nominal_trajectory_fit']
+        Nominal_pos_norm_fit = np.linalg.norm(Nominal_trajectory_fit[:, 0:3], axis=1)
+        dict["Fitted_norm"] = Nominal_pos_norm_fit
+
         for key in monte_sample.keys():
             dict["Clone_norm"][key] = np.linalg.norm(monte_sample[key][:, 0:3], axis=1) 
             dict["Clone_vel_norm"][key] = np.linalg.norm(monte_sample[key][:, 3:], axis=1) 
@@ -157,11 +162,10 @@ for sim_folder in sorted(os.listdir(comet_path)):
             ax.plot_wireframe(_x, _y, _z, color="orange", alpha=0.5, lw=0.5, zorder=0)
 
 
-        fig = plt.figure(figsize=(15, 8))
+        fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
         ax.set_aspect("equal", adjustable="box")
 
-        
         clone_keys = list(trajectories.keys())
         selected_keys = random.sample(clone_keys, min(n_clones, len(clone_keys)))
 
@@ -190,6 +194,7 @@ for sim_folder in sorted(os.listdir(comet_path)):
         plt.show()
 
     # plot_ensemble(data, n_clones=20)
+
     if simulator == 'TUDAT_':
         mask = Family['Nominal_norm']/const.au <= 1.2
         if np.any(mask):
@@ -280,28 +285,77 @@ for sim_folder in sorted(os.listdir(comet_path)):
 
 
 # ---------------------------------------------------------------------------------------------
+# NOTE: MANUALLY CHANGE THE INPUT FILE FOR THE DIFF_ORBIT
+def diff_orbit_fits():
+    with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_data.pkl", "rb") as f:
+        data = pickle.load(f)
+    with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_Info.pkl", "rb") as f:
+        info = pickle.load(f)
+    
+    JPL_elements = data["Nominal_trajectory"]
+    Fit_elements = data["Nominal_trajectory_fit"]
+    diff_elements = JPL_elements - Fit_elements
+    diff = np.linalg.norm(diff_elements,axis=1)
+    fig, axs = plt.subplots(4, 1, figsize=(10, 8))
+
+    labels = ['x (km)', 'y (km)', 'z (km)']
+    for i in range(3):
+        axs[i].plot(data["Nominal_trajectory_times"], diff_elements[:, i] / 1e3, color='tab:blue')
+        axs[i].set_ylabel(labels[i])
+        axs[i].grid(True)
+
+    axs[2].set_xlabel('Time [MJD]')
+
+    distance_sorted = sorted(np.linalg.norm(JPL_elements,axis=1) / const.au, reverse=True)
+    axs[3].plot(distance_sorted, diff / 1e3, color='tab:orange')
+    axs[3].set_ylabel(r'$||r_{diff}||$ (km)')
+    axs[3].grid(True)
+    axs[3].set_xlabel('Distance [AU]')
+    axs[3].invert_xaxis()
+
+    fig.suptitle(f'Difference between fitted state vector and JPL fitted, {info["used_obs"]} observations')
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.savefig(f"{base_path}/{simulator}Difference_{comet}.pdf", dpi=300)
+    # plt.show()
+
+diff_orbit_fits()
+
 
 divergence = general_statistics["Clone_Divergence_Norm_peri"][comet]
 dt = sorted(divergence.keys(), reverse=True)
 
-data = [np.array(divergence[n])/ 1e3 for n in dt]
-positions = np.arange(len(dt)) * 2
+dt = np.array(dt, dtype=float)
+
+data = [np.array(divergence[n]) / 1e3 for n in dt]
 
 plt.figure(figsize=(15, 8))
-box = plt.boxplot(data, positions=positions, widths=0.5, patch_artist=True)
+
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=5, 
+    patch_artist=True,
+    manage_ticks=False
+)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
-    patch.set_alpha(0.6)  
+    patch.set_alpha(0.6)
 
-plt.xticks(positions, [f"{n}" for n in dt],rotation=70)
-plt.yscale('log')
+time = np.arange(max(dt),min(dt)-20,-20)
+
+plt.xticks(time,rotation=70)
+plt.gca().invert_xaxis()
+plt.yscale("log")
 plt.ylabel("Clone Position Divergence Norm at perihelion [km]")
 plt.xlabel(r"$\Delta{Days}$")
-plt.title(f"Clone Position Divergence vs. Days to Perihelion {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
+plt.title(
+    f"Clone Position Divergence vs. Days to Perihelion {comet}\n"
+    f"{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
+)
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(f'{base_path}/{simulator}boxplot_{comet}_POS_Peri.pdf',dpi=300)
+plt.savefig(f"{base_path}/{simulator}boxplot_{comet}_POS_Peri.pdf", dpi=300)
 # plt.show()
 
 # ---------------------------------------------------------------------------------------------
@@ -313,14 +367,24 @@ data = [np.array(divergence[n]) for n in dt]
 positions = np.arange(len(dt)) * 2
 
 plt.figure(figsize=(15, 8))
-box = plt.boxplot(data, positions=positions, widths=0.5, patch_artist=True)
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=5, 
+    patch_artist=True,
+    manage_ticks=False
+)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
-    patch.set_alpha(0.6)  
+    patch.set_alpha(0.6)
 
-plt.xticks(positions, [f"{n}" for n in dt],rotation=70)
-plt.yscale('log')
+time = np.arange(max(dt),min(dt)-20,-20)
+
+plt.xticks(time,rotation=70)
+plt.gca().invert_xaxis()
+
+plt.yscale("log")
 plt.ylabel("Clone Velocity Divergence Norm at perihelion [m/s]")
 plt.xlabel(r"$\Delta{Days}$")
 plt.title(f"Clone Velocity Divergence vs. Days to Perihelion {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
@@ -337,14 +401,24 @@ data = [np.array(divergence[n])/1000 for n in dt]
 positions = np.arange(len(dt)) * 2
 
 plt.figure(figsize=(15, 8))
-box = plt.boxplot(data, positions=positions, widths=0.5, patch_artist=True)
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=5, 
+    patch_artist=True,
+    manage_ticks=False
+)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
-    patch.set_alpha(0.6)  
+    patch.set_alpha(0.6)
 
-plt.xticks(positions, [f"{n}" for n in dt],rotation=70)
-plt.yscale('log')
+time = np.arange(max(dt),min(dt)-20,-20)
+
+plt.xticks(time,rotation=70)
+plt.gca().invert_xaxis()
+
+plt.yscale("log")
 plt.ylabel("Clone Position Divergence Norm at 1.2 AU [km]")
 plt.xlabel(r"$\Delta{Days}$")
 plt.title(f"Clone Velocity Divergence vs. Days to 1.2 AU {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
@@ -362,14 +436,24 @@ data = [np.array(divergence[n]) for n in dt]
 positions = np.arange(len(dt)) * 2
 
 plt.figure(figsize=(15, 8))
-box = plt.boxplot(data, positions=positions, widths=0.5, patch_artist=True)
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=5, 
+    patch_artist=True,
+    manage_ticks=False
+)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
-    patch.set_alpha(0.6)  
+    patch.set_alpha(0.6)
 
-plt.xticks(positions, [f"{n}" for n in dt],rotation=70)
-plt.yscale('log')
+time = np.arange(max(dt),min(dt)-20,-20)
+
+plt.xticks(time,rotation=70)
+plt.gca().invert_xaxis()
+
+plt.yscale("log")
 plt.ylabel("Clone Velocity Divergence Norm at 1.2 AU [m/s]")
 plt.xlabel(r"$\Delta{Days}$")
 plt.title(f"Clone Velocity Divergence vs. Days to 1.2 AU {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
