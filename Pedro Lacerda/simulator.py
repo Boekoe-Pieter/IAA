@@ -107,7 +107,7 @@ for comet, data in files_dict.items():
         end_time_MJD =  time_representation.julian_day_to_modified_julian_day(time_representation.seconds_since_epoch_to_julian_day(time_representation.iso_string_to_epoch(str(end_time))))
         
         sim = Util.create_sim(primary,start_time_MJD,Integrator,timestep)
-        times = np.arange(start_time_MJD, end_time_MJD+timestep, timestep)
+        times = np.arange(start_time_MJD, end_time_MJD+timestep, timestep/2)
         data_to_write['Nominal_trajectory_times'] = times
         data_to_write['Monte_trajectory_times'] = times
 

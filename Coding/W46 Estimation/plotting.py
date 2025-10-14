@@ -43,17 +43,17 @@ obs_scatter = {
 # -------------------------------
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
-base_path = "Pedro Lacerda/"
-comet = 'C2013US10'
+base_path = "Coding/W46 Estimation/"
+comet = 'C2001Q4'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
-simulator = 'Rebound_' # Rebound_ 'TUDAT_'
+simulator = 'TUDAT_' # Rebound_ 'TUDAT_'
 
 for sim_folder in sorted(os.listdir(comet_path)):
     sim_path = os.path.join(comet_path, sim_folder)
-    data_file = os.path.join(sim_path, f"{simulator}Simulation_data.pkl")
-    info_file = os.path.join(sim_path, f"{simulator}Simulation_info.pkl")
+    data_file = os.path.join(sim_path, f"Simulation_data.pkl")
+    info_file = os.path.join(sim_path, f"Simulation_info.pkl")
 
     with open(data_file, "rb") as f:
         data = pickle.load(f)
@@ -194,73 +194,39 @@ for sim_folder in sorted(os.listdir(comet_path)):
         plt.show()
 
     # plot_ensemble(data, n_clones=20)
+    
+    mask = Family['Nominal_norm']/const.au <= 1.2
+    if np.any(mask):
+        idx_1AU = np.argmax(mask)
+        time = data['Nominal_trajectory_times'][idx_1AU]
+    
+    time_JD = time_representation.seconds_since_epoch_to_julian_day(time)
+    time_1AU = Time(time_JD, format='jd', scale='utc') 
 
-    if simulator == 'TUDAT_':
-        mask = Family['Nominal_norm']/const.au <= 1.2
-        if np.any(mask):
-            idx_1AU = np.argmax(mask)
-            time = data['Nominal_trajectory_times'][idx_1AU]
-        
-        time_JD = time_representation.seconds_since_epoch_to_julian_day(time)
-        time_1AU = Time(time_JD, format='jd', scale='utc') 
+    last_obs_str = info["Sim_time"].get("last obs")
+    last_obs = Time(last_obs_str, format='isot', scale='utc')
 
-        last_obs_str = info["Sim_time"].get("last obs")
-        last_obs = Time(last_obs_str, format='isot', scale='utc')
+    t1_tdb = time_1AU.tdb
+    t2_tdb = last_obs.tdb
 
-        t1_tdb = time_1AU.tdb
-        t2_tdb = last_obs.tdb
+    dt_days = (t1_tdb - t2_tdb).to('day').value
+    dt_days = round(dt_days, 3)
 
-        dt_days = (t1_tdb - t2_tdb).to('day').value
-        dt_days = round(dt_days, 3)
+    times_sec = np.array(data['Nominal_trajectory_times']).flatten() 
+    r_norm = np.array(Family['Nominal_norm']) / const.au
 
-        times_sec = np.array(data['Nominal_trajectory_times']).flatten() 
-        r_norm = np.array(Family['Nominal_norm']) / const.au
+    t_obs_sec = time_representation.iso_string_to_epoch(str(t2_tdb))
 
-        t_obs_sec = time_representation.iso_string_to_epoch(str(t2_tdb))
+    r_obs_AU = np.interp(t_obs_sec, times_sec, r_norm)
+    
+    perihelion_str = info["Sim_time"].get("End_iso")
+    last_obs_str = info["Sim_time"].get("last obs")
 
-        r_obs_AU = np.interp(t_obs_sec, times_sec, r_norm)
-        
-        perihelion_str = info["Sim_time"].get("End_iso")
-        last_obs_str = info["Sim_time"].get("last obs")
+    perihelion = datetime.fromisoformat(perihelion_str.replace("Z", "+00:00"))
+    last_obs = datetime.fromisoformat(last_obs_str.replace("Z", "+00:00"))
 
-        perihelion = datetime.fromisoformat(perihelion_str.replace("Z", "+00:00"))
-        last_obs = datetime.fromisoformat(last_obs_str.replace("Z", "+00:00"))
+    dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3)
 
-        dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3)
-
-    else:
-        mask = Family['Nominal_norm']/const.au <= 1.2
-        if np.any(mask):
-            idx_1AU = np.argmax(mask)
-            time = data['Nominal_trajectory_times'][idx_1AU]
-        
-        time_JD = time_representation.modified_julian_day_to_julian_day(time)
-        time_1AU = Time(time_JD, format='jd', scale='utc') 
-
-        last_obs_str = info["Sim_time"].get("last obs")
-        last_obs = Time(last_obs_str, format='isot', scale='utc')
-
-        t1_tdb = time_1AU.tdb
-        t2_tdb = last_obs.tdb
-
-        dt_days = (t1_tdb - t2_tdb).to('day').value
-        dt_days = round(dt_days, 3)
-
-        times_MJD = np.array(data['Nominal_trajectory_times']).flatten()
-
-        r_norm = np.array(Family['Nominal_norm']) / const.au
-
-        t_obs_MJD= t2_tdb.mjd
-
-        r_obs_AU = np.interp(t_obs_MJD, times_MJD, r_norm)
-        
-        perihelion_str = info["Sim_time"].get("End_iso")
-        last_obs_str = info["Sim_time"].get("last obs")
-
-        perihelion = datetime.fromisoformat(perihelion_str.replace("Z", "+00:00"))
-        last_obs = datetime.fromisoformat(last_obs_str.replace("Z", "+00:00"))
-
-        dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3)   
 
     if comet not in general_statistics["Clone_Divergence_Norm_peri"]:
         general_statistics["Clone_Divergence_Norm_peri"][comet] = {}

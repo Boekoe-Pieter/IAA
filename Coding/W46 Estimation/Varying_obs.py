@@ -10,15 +10,9 @@ from tudatpy.data.sbdb import SBDBquery
 
 # other useful modules
 import numpy as np
-import random
-import pprint
 import pickle
 
 # other libraries
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import matplotlib.cm as cm
-import spiceypy as spicepy
 import os
 
 # Horizons requests
@@ -39,8 +33,8 @@ rel_dir = os.path.dirname(os.path.abspath(__file__))
 # ----------------------------------------------------------------------
 
 # samples
-perform_montecarlo = False
-Orbit_samples = 1000
+perform_montecarlo = True
+Orbit_samples = 100
 Observation_step_size = 10
 
 # number of iterations for our estimation
@@ -80,11 +74,12 @@ all_results = ["C2001Q4","C2008A1","C2013US10"]
 for body in all_results:
     target_mpc_code = body
     target_sbdb = SBDBquery(target_mpc_code,full_precision=True)
-
+    print(target_sbdb)
     spkid = target_sbdb['object']['spkid']
     name  = target_sbdb['object']['fullname']
     designator = target_sbdb['object']['des']
-    directory_name = f"{rel_dir}/plots_{designator}"
+
+    directory_name = f"{rel_dir}/data_{body}"
 
     print(f"SPKid: {spkid} for body {name}")
 
@@ -218,7 +213,7 @@ for body in all_results:
     # ----------------------------------------------------------------------
     "Creating the reference orbit will have all accelerations acting on the comet,"
     "note: the NGA's are JPL fitted THESE CANT BE REUSED WHEN ESTIMATING THE ORBIT"
-
+    # print("Creating reference orbit")
     def NGA(time: float) -> np.ndarray:
         state = bodies.get(str(spkid)).state
         r_vec = state[:3]
@@ -365,14 +360,6 @@ for body in all_results:
 
     propagated_state_history = dynamics_simulator.state_history
 
-    body_ephemeris = environment_setup.ephemeris.tabulated(
-        propagated_state_history,
-        global_frame_origin,
-        global_frame_orientation
-    )
-
-    body_settings.get(str(spkid)).ephemeris_settings = body_ephemeris
-
     # ----------------------------------------------------------------------
     "We define the LSST as our observatory, and is located in the center of the earth as we are not interested in the effect of one telescope"
     "but the effect of N observations. Sim time is one observation per day as per LSST and noise is added as per LSST (source from Pedro Lacerda ESTEC)"
@@ -510,7 +497,6 @@ for body in all_results:
         propagator_settings,
         integrate_on_creation=True)
 
-
     Full_observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
     max_observations = len(Full_observation_times)
     observation_counts = list(range(Observation_step_size, max_observations + Observation_step_size, Observation_step_size))
@@ -518,16 +504,20 @@ for body in all_results:
     # ----------------------------------------------------------------------
     # Loop over all observations
     # ----------------------------------------------------------------------
+    try:
+        os.mkdir(directory_name)
+        print(f"Directory '{directory_name}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}' already exists.")
+    sim = 1
+
     for n_obs in observation_counts:
-
         current_times = Full_observation_times[:n_obs]
-
         observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
             observable_models_setup.model_settings.angular_position_type,
             link_definition,
             current_times
         )
-
         observation_simulation_settings = [observation_simulation_settings_RADEC] 
 
         # Add noise levels as Gaussian noise to the observation
@@ -563,8 +553,8 @@ for body in all_results:
         # Perturb the initial state estimate from the truth
         perturbed_parameters = truth_parameters.copy( )
         for i in range(3):
-            perturbed_parameters[i] += 1000.0
-            perturbed_parameters[i+3] += 10
+            perturbed_parameters[i] += 10.0
+            perturbed_parameters[i+3] += 0.01
 
         parameters_to_estimate.parameter_vector = perturbed_parameters
 
@@ -606,49 +596,19 @@ for body in all_results:
         # ----------------------------------------------------------------------
         # ----------------------------------------------------------------------
         # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        " This part of the code plots all the observations"
-
-        try:
-            os.mkdir(directory_name)
-            print(f"Directory '{directory_name}' created successfully.")
-        except FileExistsError:
-            print(f"Directory '{directory_name}' already exists.")
-        addition = '/Observations'
-        try:
-            os.mkdir(f"{directory_name}{addition}")
-            print(f"Directory '{directory_name}{addition}' created successfully.")
-        except FileExistsError:
-            print(f"Directory '{directory_name}{addition}' already exists.")
-
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
-        # ----------------------------------------------------------------------
         "this part of the code is for the covariance sampling and propagation"
-        sim = 0
-
         if perform_montecarlo:
-            # create directory
-            addition = '/Montecarlo'
+            subdir = f"{directory_name}/Simulation_{sim}"
             try:
-                os.mkdir(f"{directory_name}{addition}")
-                print(f"Directory '{directory_name}{addition}' created successfully.")
+                os.mkdir(subdir)
+                print(f"Directory '{subdir}' created successfully.")
             except FileExistsError:
-                print(f"Directory '{directory_name}{addition}' already exists.")
+                print(f"Directory '{subdir}' already exists.")
 
+            print("performing monte carlo")
             initial_covariance = covariance_output.covariance                                   # covariance from observations
-            initial_state = pod_output.parameter_history[-1]                                    # Estimated initial state from sythetic observations
-
+            initial_state = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)         # Estimated initial state from sythetic observations
+            print(np.linalg.norm(initial_state)/constants.ASTRONOMICAL_UNIT)
             np.random.seed(42)                                                                  # the answer to everything
             trajectory_parameters = initial_state.copy()
             samples = np.random.multivariate_normal(trajectory_parameters, initial_covariance, size=Orbit_samples)
@@ -669,47 +629,77 @@ for body in all_results:
             }
 
             models = [Gravityaccelerations]
-            
+
+            # ----------------------------------------------------------------------------
+            "Saving dictionaries"
             data_to_write = {
-                "Nominal_trajectory":0,
-                "Nominal_trajectory_times":0,
+                "SBDB_reference_trajectory":0,
+                "SBDB_trajectory_times":0,
+
+                "Estimated_reference_trajectory":0,
+                "Estimated_trajectory_times":0,
+
                 "Monte_trajectory": {},
                 "Monte_trajectory_times": {},
                 "Initial_condition": 0,
-                "Sampled_data": 0,
-            }
+                "Sampled_data": 0}
             
-
             sim_info = {
-            "Body": body,
-            "Simulator": "TUDAT",
-            "Integrator": "RK89",
-            "Sim_time": {
-                'Start_iso': first_obs,
-                'End_iso': last_obs,
-                'last obs': current_times[-1],
-                'Start_TDB': SSE_start,
-                'End_TDB': SSE_end,
-                }, 
-            "timestep": timestep_global,
-            "N_clones": Orbit_samples,
-            "origin": global_frame_origin,
-            "Orientation": global_frame_orientation,
-            "Environment": bodies_to_create,
-            "Planetary positions":'TUDAT Standard kernels & Horizons comet SPKID (https://py.api.tudat.space/en/latest/interface/spice.html#tudatpy.interface.spice.load_standard_kernels)',
-            "Perturbations": {
-                'NBP': 'Off',
-                'Relativity': "Off",
-                },
-            "used_obs": n_obs,
+                "Body": body,
+                "Simulator": "TUDAT",
+                "Integrator": "RK89",
+                "Sim_time": {
+                    'Start_iso': first_obs,
+                    'End_iso': last_obs,
+                    'last obs': current_times[-1],
+                    'Start_TDB': SSE_start,
+                    'End_TDB': SSE_end,
+                    }, 
+
+                "timestep": timestep_global,
+                "N_clones": Orbit_samples,
+                "origin": global_frame_origin,
+                "Orientation": global_frame_orientation,
+                "Environment": bodies_to_create,
+                "Planetary positions":'TUDAT Standard kernels & Horizons comet SPKID (https://py.api.tudat.space/en/latest/interface/spice.html#tudatpy.interface.spice.load_standard_kernels)',
+                "Perturbations": {
+                    'NBP': 'Off',
+                    'Relativity': "Off",
+                    },
+                "used_obs": n_obs,
             }
+
+                
+                # ----------------------------------------------------------------------------
             
+            # ----------------------------------------------------------------------------
+            "SBDB Reference orbit, calculated at the start"
+            data_to_write['SBDB_reference_trajectory'] = np.vstack(list(propagated_state_history.values()))
+            data_to_write['SBDB_trajectory_times'] = np.vstack(list(state_hist.keys()))
+
             for model in models:
                 acceleration_settings[str(spkid)] = model
                 acceleration_models = propagation_setup.create_acceleration_models(
-                        bodies, acceleration_settings, bodies_to_propagate, central_bodies
-                    )
-                
+                        bodies, acceleration_settings, bodies_to_propagate, central_bodies)
+
+                # ----------------------------------------------------------------------------
+                "Fitted Reference orbit"
+                propagator_settings = propagation_setup.propagator.translational(
+                        central_bodies=central_bodies,
+                        acceleration_models=acceleration_models,
+                        bodies_to_integrate=bodies_to_propagate,
+                        initial_states=initial_state,
+                        initial_time=SSE_start,
+                        integrator_settings=integrator_settings,
+                        termination_settings=termination_condition,)
+
+                dynamics_simulator_estimated_state = simulator.create_dynamics_simulator(
+                    bodies, propagator_settings)
+
+                state_hist = dynamics_simulator_estimated_state.propagation_results.state_history
+                data_to_write['Estimated_reference_trajectory'] = np.vstack(list(state_hist.values()))
+                data_to_write['Estimated_trajectory_times'] = np.vstack(list(state_hist.keys()))
+
                 for i, sampled_conditions in enumerate(samples):
                     propagator_settings = propagation_setup.propagator.translational(
                         central_bodies=central_bodies,
@@ -718,8 +708,7 @@ for body in all_results:
                         initial_states=sampled_conditions,
                         initial_time=SSE_start,
                         integrator_settings=integrator_settings,
-                        termination_settings=termination_condition,
-                    )
+                        termination_settings=termination_condition,)
 
                     dynamics_simulator_montecarlo = simulator.create_dynamics_simulator(
                         bodies, propagator_settings
@@ -736,7 +725,8 @@ for body in all_results:
                     Total_Function_evaluations = list(Function_evaluations.values())[-1]
             
             
-            with open(f"{directory_name}{addition}/TUDAT_Simulation_data.pkl", "wb") as f:
+            with open(f"{subdir}/Simulation_data.pkl", "wb") as f:
                 pickle.dump(data_to_write, f)
-            
+            with open(f"{subdir}/Simulation_Info.pkl", "wb") as f:
+                pickle.dump(sim_info, f)
             sim += 1
