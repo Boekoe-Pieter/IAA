@@ -44,7 +44,7 @@ obs_scatter = {
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
 base_path = "Pedro Lacerda/"
-comet = 'C2013US10'
+comet = 'C2001Q4'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
@@ -287,9 +287,9 @@ for sim_folder in sorted(os.listdir(comet_path)):
 # ---------------------------------------------------------------------------------------------
 # NOTE: MANUALLY CHANGE THE INPUT FILE FOR THE DIFF_ORBIT
 def diff_orbit_fits():
-    with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_data.pkl", "rb") as f:
+    with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_data.pkl", "rb") as f:
         data = pickle.load(f)
-    with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_Info.pkl", "rb") as f:
+    with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_Info.pkl", "rb") as f:
         info = pickle.load(f)
     
     JPL_elements = data["Nominal_trajectory"]

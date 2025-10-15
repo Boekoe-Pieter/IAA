@@ -82,7 +82,7 @@ for comet, data in files_dict.items():
 
         #SBDB Method
         target_sbdb = SBDBquery(body,full_precision=True)
-        # print(target_sbdb)
+
         e = target_sbdb["orbit"]['elements'].get('e')
         a = target_sbdb["orbit"]['elements'].get('a').value 
         q = target_sbdb["orbit"]['elements'].get('q').value 

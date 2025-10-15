@@ -161,6 +161,7 @@ for comet, data in files_dict.items():
         # add fitted reference
         def add_fit_ref(ref_sim):
             Mx, My, Mz, Mvx, Mvy, Mvz = initial_conidtions
+            ref_sim.move_to_hel()
             ref_sim.add(
                 m = 0.0,
                 x = Mx,
@@ -181,7 +182,6 @@ for comet, data in files_dict.items():
             f"Samples: {N_samples}\n"
             )
 
-        sim.move_to_com()
         start = timer.perf_counter()
         for j, time in enumerate(times):
             sim.integrate(time)

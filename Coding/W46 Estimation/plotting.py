@@ -83,11 +83,11 @@ for sim_folder in sorted(os.listdir(comet_path)):
 
     def compute_family(dict, data):
         monte_sample = data['Monte_trajectory']
-        Nominal_trajectory = data['Nominal_trajectory']
+        Nominal_trajectory = data['SBDB_reference_trajectory']
         Nominal_pos_norm = np.linalg.norm(Nominal_trajectory[:, 0:3], axis=1)
         dict["Nominal_norm"] = Nominal_pos_norm
 
-        Nominal_trajectory_fit = data['Nominal_trajectory_fit']
+        Nominal_trajectory_fit = data['Estimated_reference_trajectory']
         Nominal_pos_norm_fit = np.linalg.norm(Nominal_trajectory_fit[:, 0:3], axis=1)
         dict["Fitted_norm"] = Nominal_pos_norm_fit
 
@@ -177,7 +177,8 @@ for sim_folder in sorted(os.listdir(comet_path)):
             ax.scatter(cartesian[-1, 0]/const.au, cartesian[-1, 1]/const.au, cartesian[-1, 2]/const.au,
                     marker="x", s=10, color="red") 
         
-        D_traject(np.array(data["Nominal_trajectory"]), ax=ax, label='JPL API / Horizons start', color="black", alpha=0.9)
+        D_traject(np.array(data["SBDB_reference_trajectory"]), ax=ax, label='JPL API / Horizons start', color="black", alpha=0.9)
+        D_traject(np.array(data["Estimated_reference_trajectory"]), ax=ax, label='Estimated state', color="blue", alpha=0.9)
 
         draw_sun(ax)
 
@@ -194,25 +195,25 @@ for sim_folder in sorted(os.listdir(comet_path)):
         plt.show()
 
     # plot_ensemble(data, n_clones=20)
-    
+
     mask = Family['Nominal_norm']/const.au <= 1.2
     if np.any(mask):
         idx_1AU = np.argmax(mask)
-        time = data['Nominal_trajectory_times'][idx_1AU]
+        time = data['SBDB_trajectory_times'][idx_1AU]
     
     time_JD = time_representation.seconds_since_epoch_to_julian_day(time)
     time_1AU = Time(time_JD, format='jd', scale='utc') 
 
     last_obs_str = info["Sim_time"].get("last obs")
-    last_obs = Time(last_obs_str, format='isot', scale='utc')
+    last_obs = time_representation.seconds_since_epoch_to_julian_day(last_obs_str)
 
     t1_tdb = time_1AU.tdb
-    t2_tdb = last_obs.tdb
-
+    t2_tdb = last_obs
+    print(t1_tdb,t2_tdb)
     dt_days = (t1_tdb - t2_tdb).to('day').value
     dt_days = round(dt_days, 3)
 
-    times_sec = np.array(data['Nominal_trajectory_times']).flatten() 
+    times_sec = np.array(data['SBDB_trajectory_times']).flatten() 
     r_norm = np.array(Family['Nominal_norm']) / const.au
 
     t_obs_sec = time_representation.iso_string_to_epoch(str(t2_tdb))

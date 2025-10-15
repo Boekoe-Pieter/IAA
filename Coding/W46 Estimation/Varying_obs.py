@@ -209,158 +209,6 @@ for body in all_results:
     central_bodies = [global_frame_origin]
 
     # ----------------------------------------------------------------------
-    # Define accelerations on the body of interest
-    # ----------------------------------------------------------------------
-    "Creating the reference orbit will have all accelerations acting on the comet,"
-    "note: the NGA's are JPL fitted THESE CANT BE REUSED WHEN ESTIMATING THE ORBIT"
-    # print("Creating reference orbit")
-    def NGA(time: float) -> np.ndarray:
-        state = bodies.get(str(spkid)).state
-        r_vec = state[:3]
-        v_vec = state[3:]
-
-        r_norm = np.linalg.norm(r_vec)
-
-        m = 2.15
-        n = 5.093
-        k = 4.6142
-        r0 = 2.808*constants.ASTRONOMICAL_UNIT
-        alpha = 0.1113
-
-        A1, A2, A3 = param_dict['A1'],param_dict['A2'],param_dict['A3']
-        A_vec = np.array([A1, A2, A3])
-
-        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
-
-        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
-
-        F_vec_rtn = g * A_vec
-        F_vec_inertial = C_rtn2eci @ F_vec_rtn
-
-        return F_vec_inertial  
-
-    def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
-        r_hat = r_vec / np.linalg.norm(r_vec)
-        h_vec = np.cross(r_vec, v_vec)
-        h_hat = h_vec / np.linalg.norm(h_vec)
-        t_hat = np.cross(h_hat, r_hat)
-
-        C = np.vstack((r_hat, t_hat, h_hat)).T
-        return C
-
-    accelerations = {
-        "Sun": [
-            propagation_setup.acceleration.point_mass_gravity(),
-            propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
-
-        ],
-
-        "Mercury": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Venus": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Earth": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Moon": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Mars": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Phobos": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Deimos": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Jupiter": [
-            propagation_setup.acceleration.point_mass_gravity(),
-            propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
-        ],
-        "Ganymede": [propagation_setup.acceleration.point_mass_gravity()],
-        "Europa": [propagation_setup.acceleration.point_mass_gravity()],
-        "Callisto": [propagation_setup.acceleration.point_mass_gravity()],
-        "Io": [propagation_setup.acceleration.point_mass_gravity()],
-
-        "Saturn": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Enceladus": [propagation_setup.acceleration.point_mass_gravity()],
-        "Titan": [propagation_setup.acceleration.point_mass_gravity()],
-
-        "Uranus": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Neptune": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        
-        str(spkid): [propagation_setup.acceleration.custom_acceleration(NGA)]
-    }
-
-    bodies_to_propagate = [str(spkid)]
-    acceleration_settings = {}
-    acceleration_settings[str(spkid)] = accelerations
-
-    # create the acceleration models.
-    acceleration_models = propagation_setup.create_acceleration_models(
-        bodies, acceleration_settings, bodies_to_propagate, central_bodies
-    )
-
-    integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
-            time_step = timestep_global,
-            coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
-            order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
-
-    termination_condition = propagation_setup.propagator.time_termination(SSE_end_buffer)
-
-    initial_state = spice.get_body_cartesian_state_at_epoch(
-        str(spkid),
-        global_frame_origin,
-        global_frame_orientation,
-        "NONE",
-        SSE_start_buffer,
-    )
-
-    dependent_variables_to_save = [
-                                propagation_setup.dependent_variable.relative_position("Mercury", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Venus", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Earth", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Mars", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Jupiter", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Saturn", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Uranus", "Sun"),
-                                propagation_setup.dependent_variable.relative_position("Neptune", "Sun"),
-                                propagation_setup.dependent_variable.keplerian_state(str(spkid), "Sun"),
-                                ]
-
-    propagator_settings = propagation_setup.propagator.translational(
-        central_bodies=central_bodies,
-        acceleration_models=acceleration_models,
-        bodies_to_integrate=bodies_to_propagate,
-        initial_states=initial_state,
-        initial_time=SSE_start_buffer,
-        integrator_settings=integrator_settings,
-        termination_settings=termination_condition,
-    )
-
-    dynamics_simulator = simulator.create_dynamics_simulator(
-        bodies, propagator_settings
-    )
-
-    propagated_state_history = dynamics_simulator.state_history
-
-    # ----------------------------------------------------------------------
     "We define the LSST as our observatory, and is located in the center of the earth as we are not interested in the effect of one telescope"
     "but the effect of N observations. Sim time is one observation per day as per LSST and noise is added as per LSST (source from Pedro Lacerda ESTEC)"
     "We remove the timebuffer from the observation times as we are only interested in the actual time frame"
@@ -395,7 +243,6 @@ for body in all_results:
     # Define accelerations on the body of interest
     # ----------------------------------------------------------------------
     "We re-define the accelerations on the comet, and redefine the NGA defenition as we now want to estimate the A1,A2,A3 parameters"
-
     accelerations = {
         "Sun": [
             propagation_setup.acceleration.point_mass_gravity(),
@@ -466,6 +313,21 @@ for body in all_results:
     # create the acceleration models.
     acceleration_models = propagation_setup.create_acceleration_models(
         bodies, acceleration_settings, bodies_to_propagate, central_bodies
+    )
+    
+    integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
+            time_step = timestep_global,
+            coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
+            order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
+
+    termination_condition = propagation_setup.propagator.time_termination(SSE_end_buffer)
+
+    initial_state = spice.get_body_cartesian_state_at_epoch(
+        str(spkid),
+        global_frame_origin,
+        global_frame_orientation,
+        "NONE",
+        SSE_start_buffer,
     )
 
     propagator_settings = propagation_setup.propagator.translational(
@@ -674,8 +536,154 @@ for body in all_results:
             
             # ----------------------------------------------------------------------------
             "SBDB Reference orbit, calculated at the start"
+            # print("Creating reference orbit")
+            def NGA(time: float) -> np.ndarray:
+                state = bodies.get(str(spkid)).state
+                r_vec = state[:3]
+                v_vec = state[3:]
+
+                r_norm = np.linalg.norm(r_vec)
+
+                m = 2.15
+                n = 5.093
+                k = 4.6142
+                r0 = 2.808*constants.ASTRONOMICAL_UNIT
+                alpha = 0.1113
+
+                A1, A2, A3 = param_dict['A1'],param_dict['A2'],param_dict['A3']
+                A_vec = np.array([A1, A2, A3])
+
+                g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+
+                C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+
+                F_vec_rtn = g * A_vec
+                F_vec_inertial = C_rtn2eci @ F_vec_rtn
+
+                return F_vec_inertial  
+
+            def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
+                r_hat = r_vec / np.linalg.norm(r_vec)
+                h_vec = np.cross(r_vec, v_vec)
+                h_hat = h_vec / np.linalg.norm(h_vec)
+                t_hat = np.cross(h_hat, r_hat)
+
+                C = np.vstack((r_hat, t_hat, h_hat)).T
+                return C
+
+            accelerations = {
+                "Sun": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                    propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
+
+                ],
+
+                "Mercury": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Venus": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Earth": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Moon": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Mars": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Phobos": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Deimos": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+
+                "Jupiter": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                    propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
+                ],
+                "Ganymede": [propagation_setup.acceleration.point_mass_gravity()],
+                "Europa": [propagation_setup.acceleration.point_mass_gravity()],
+                "Callisto": [propagation_setup.acceleration.point_mass_gravity()],
+                "Io": [propagation_setup.acceleration.point_mass_gravity()],
+
+                "Saturn": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+                "Enceladus": [propagation_setup.acceleration.point_mass_gravity()],
+                "Titan": [propagation_setup.acceleration.point_mass_gravity()],
+
+                "Uranus": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+                "Neptune": [
+                    propagation_setup.acceleration.point_mass_gravity(),
+                ],
+                
+                str(spkid): [propagation_setup.acceleration.custom_acceleration(NGA)]
+            }
+
+            bodies_to_propagate = [str(spkid)]
+            acceleration_settings = {}
+            acceleration_settings[str(spkid)] = accelerations
+
+            # create the acceleration models.
+            acceleration_models = propagation_setup.create_acceleration_models(
+                bodies, acceleration_settings, bodies_to_propagate, central_bodies
+            )
+
+            integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
+                    time_step = timestep_global,
+                    coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
+                    order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
+
+            termination_condition = propagation_setup.propagator.time_termination(SSE_end)
+
+            initial_state = spice.get_body_cartesian_state_at_epoch(
+                str(spkid),
+                global_frame_origin,
+                global_frame_orientation,
+                "NONE",
+                SSE_start,
+            )
+
+            dependent_variables_to_save = [
+                                        propagation_setup.dependent_variable.relative_position("Mercury", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Venus", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Earth", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Mars", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Jupiter", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Saturn", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Uranus", "Sun"),
+                                        propagation_setup.dependent_variable.relative_position("Neptune", "Sun"),
+                                        propagation_setup.dependent_variable.keplerian_state(str(spkid), "Sun"),
+                                        ]
+
+            propagator_settings = propagation_setup.propagator.translational(
+                central_bodies=central_bodies,
+                acceleration_models=acceleration_models,
+                bodies_to_integrate=bodies_to_propagate,
+                initial_states=initial_state,
+                initial_time=SSE_start,
+                integrator_settings=integrator_settings,
+                termination_settings=termination_condition,
+            )
+
+            dynamics_simulator = simulator.create_dynamics_simulator(
+                bodies, propagator_settings
+            )
+
+            propagated_state_history = dynamics_simulator.state_history
             data_to_write['SBDB_reference_trajectory'] = np.vstack(list(propagated_state_history.values()))
-            data_to_write['SBDB_trajectory_times'] = np.vstack(list(state_hist.keys()))
+            data_to_write['SBDB_trajectory_times'] = np.vstack(list(propagated_state_history.keys()))
 
             for model in models:
                 acceleration_settings[str(spkid)] = model
