@@ -184,7 +184,7 @@ for comet, data in Lacerdas_dict.items():
     plt.tight_layout()
     plt.savefig(f"Pedro Lacerda/{comet}/oscillating_elements.pdf",dpi=300)
     plt.show()
-    plt.close()
+    # plt.close()
 
     models_nominal = np.array([m["array"] for m in data["models"]])
     models_sigma   = np.array([m["array_sig"] for m in data["models"]])
@@ -220,4 +220,4 @@ for comet, data in Lacerdas_dict.items():
         plt.gca().invert_xaxis()
         plt.savefig(f"Pedro Lacerda/{comet}/oscillating_{el}.pdf",dpi=300)
         plt.show()
-        plt.close()
+        # plt.close()

@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import random
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+
 import pickle
-from scipy.stats import norm
-import matplotlib.cm as cm
 import scipy.constants as const
-from mpl_toolkits.mplot3d import Axes3D 
-import matplotlib.patches as mpatches
 import random
 from datetime import datetime
 from astropy.time import Time
@@ -40,26 +40,32 @@ obs_scatter = {
     "Helio": {},
 }
 
+valid_clone_dict = {
+    "N_obs": {},
+    "N_clones": {},
+    "N_valid_clones": {},
+}
+
 # -------------------------------
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
 base_path = "Pedro Lacerda/"
-comet = 'C2001Q4'
+comet = 'C2013US10'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
-simulator = 'Rebound_' # Rebound_ 'TUDAT_'
-
 for sim_folder in sorted(os.listdir(comet_path)):
     sim_path = os.path.join(comet_path, sim_folder)
-    data_file = os.path.join(sim_path, f"{simulator}Simulation_data.pkl")
-    info_file = os.path.join(sim_path, f"{simulator}Simulation_info.pkl")
+    data_file = os.path.join(sim_path, f"Rebound_Simulation_data.pkl")
+    info_file = os.path.join(sim_path, f"Rebound_Simulation_info.pkl")
 
     with open(data_file, "rb") as f:
         data = pickle.load(f)
     with open(info_file, "rb") as f:
         info = pickle.load(f)
 
+
+    valid_clones = info["N_valid_clones"]
     # -------------------------------
     # Gathering data
     Family = {
@@ -87,10 +93,6 @@ for sim_folder in sorted(os.listdir(comet_path)):
         Nominal_pos_norm = np.linalg.norm(Nominal_trajectory[:, 0:3], axis=1)
         dict["Nominal_norm"] = Nominal_pos_norm
 
-        Nominal_trajectory_fit = data['Nominal_trajectory_fit']
-        Nominal_pos_norm_fit = np.linalg.norm(Nominal_trajectory_fit[:, 0:3], axis=1)
-        dict["Fitted_norm"] = Nominal_pos_norm_fit
-
         for key in monte_sample.keys():
             dict["Clone_norm"][key] = np.linalg.norm(monte_sample[key][:, 0:3], axis=1) 
             dict["Clone_vel_norm"][key] = np.linalg.norm(monte_sample[key][:, 3:], axis=1) 
@@ -102,8 +104,11 @@ for sim_folder in sorted(os.listdir(comet_path)):
             dict["Clone_divergence_vel_norm"][key] = np.linalg.norm(dict["Clone_divergence_vel"][key][:,:3], axis=1)
 
             arr = Nominal_pos_norm
-            
+            #0.8229694542126116
+            #1.073074540971431
+            print(min(arr/const.au)-0.8229694542126116)
             idx_peri = np.argmin(arr)
+
             dict["Clone_Divergence_Norm_peri"][key] = dict["Clone_Divergence_Norm"][key][idx_peri]
             dict["Clone_Divergence_Nor_vel_peri"][key] = dict["Clone_divergence_vel_norm"][key][idx_peri]
 
@@ -127,140 +132,165 @@ for sim_folder in sorted(os.listdir(comet_path)):
 
                 dict["Pos_div_1AU"][key] = pos_div_1AU
                 dict["Vel_div_1AU"][key] = vel_div_1AU
-            # if np.any(mask):
-            #     idx_1AU = np.argmax(mask)
-            #     print(arr_AU[idx_1AU])
-            #     dict["Pos_div_1AU"][key] = dict["Clone_Divergence_Norm"][key][idx_1AU]
-            #     dict["Vel_div_1AU"][key] = dict["Clone_divergence_vel_norm"][key][idx_1AU]
     
     # ----------------------------------------------------
     # Gathering data and storing in general_statistics
     compute_family(Family, data)
 
-    def D_traject(cartesian, ax=None, label=None, color=None, alpha=1.0):
+    def D_traject(cartesian, ax=None, label=None, color=None, linestyle="-", alpha=1.0, lw=1.2):
         if ax is None:
-            fig = plt.figure(figsize=(15, 8))
+            fig = plt.figure(figsize=(10, 8))
             ax = fig.add_subplot(111, projection='3d')
             ax.set_aspect('equal', adjustable='box')
 
-        ax.plot(cartesian[:, 0]/const.au, cartesian[:, 1]/const.au, cartesian[:, 2]/const.au, 
-                label=label, color=color, alpha=alpha)
+        ax.plot(cartesian[:, 0]/const.au, cartesian[:, 1]/const.au, cartesian[:, 2]/const.au,
+                label=label, color=color, linestyle=linestyle, alpha=alpha, lw=lw)
         ax.scatter(cartesian[0, 0]/const.au, cartesian[0, 1]/const.au, cartesian[0, 2]/const.au, marker="o", s=10, color=color)
         ax.scatter(cartesian[-1, 0]/const.au, cartesian[-1, 1]/const.au, cartesian[-1, 2]/const.au, marker="x", s=10, color=color)
-
         return ax
 
-    def plot_ensemble(data, n_clones=20):
+    def plot_ensemble(data, info, n_clones=20):
         trajectories = data["Monte_trajectory"]
 
+        perturbing_bodies = [
+            "Mercury", "Venus", "Earth", "Luna",
+            "Mars", "Phobos", "Deimos",
+            "Jupiter", "Io", "Europa", "Ganymede", "Callisto",
+            "Saturn", "Titan", "Rhea", "Iapetus", "Dione", "Tethys", "Enceladus", "Mimas",
+            "Uranus", "Miranda", "Ariel", "Umbriel", "Titania", "Oberon",
+            "Neptune", "Triton"
+        ]
+
+        planets = ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"]
+        moons = [b for b in perturbing_bodies if b not in planets]
+
         def draw_sun(ax):
-            radius_sun = 696340 * 1000/const.au
+            radius_sun = 696340e3 /const.au
             _u, _v = np.mgrid[0:2*np.pi:50j, 0:np.pi:40j]
             _x = radius_sun * np.cos(_u) * np.sin(_v)
             _y = radius_sun * np.sin(_u) * np.sin(_v)
             _z = radius_sun * np.cos(_v)
             ax.plot_wireframe(_x, _y, _z, color="orange", alpha=0.5, lw=0.5, zorder=0)
 
-
+        # --- Figure setup ---
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
         ax.set_aspect("equal", adjustable="box")
 
+        # --- Monte Carlo clones (no legend) ---
         clone_keys = list(trajectories.keys())
         selected_keys = random.sample(clone_keys, min(n_clones, len(clone_keys)))
-
         for key in selected_keys:
             cartesian = trajectories[key]
-            ax.plot(cartesian[:, 0]/const.au, cartesian[:, 1]/const.au, cartesian[:, 2]/const.au, alpha=0.7)
-            ax.scatter(cartesian[0, 0]/const.au, cartesian[0, 1]/const.au, cartesian[0, 2]/const.au,
-                    marker="o", s=10, color="green")
-            ax.scatter(cartesian[-1, 0]/const.au, cartesian[-1, 1]/const.au, cartesian[-1, 2]/const.au,
-                    marker="x", s=10, color="red") 
-        
-        D_traject(np.array(data["Nominal_trajectory"]), ax=ax, label='JPL API / Horizons start', color="black", alpha=0.9)
+            ax.plot(cartesian[:, 0]/const.au, cartesian[:, 1]/const.au, cartesian[:, 2]/const.au,
+                    alpha=0.35, color="gray", lw=0.8)
+
+        # --- Comet orbits ---
+        D_traject(np.array(data["Nominal_trajectory"]), ax=ax,
+                label='Nominal Orbit (JPL)', color="black", linestyle="-", alpha=0.9, lw=1.8)
+        D_traject(np.array(data["Nominal_trajectory_fit"]), ax=ax,
+                label='Fitted Orbit', color="red", linestyle=":", alpha=0.9, lw=1.8)
+
+        # --- Perturbing bodies ---
+        colors = plt.cm.tab20(np.linspace(0, 1, len(perturbing_bodies)))
+        planet_handles, moon_handles = [], []
+
+        for i, body in enumerate(perturbing_bodies):
+            color = colors[i]
+            linestyle = "-" if body in planets else ":"
+            D_traject(np.array(data["perturbing_bodies"][body]), ax=ax,
+                    color=color, linestyle=linestyle, alpha=0.9, lw=1.2)
+            handle = Line2D([0], [0], color=color, lw=1.2, linestyle=linestyle)
+            if body in planets:
+                planet_handles.append((handle, body))
+            else:
+                moon_handles.append((handle, body))
 
         draw_sun(ax)
 
-        # max_value = max(np.max(np.abs(np.array(traj))) for traj in trajectories.values())
-        # ax.set_xlim([-max_value/const.au, max_value/const.au])
-        # ax.set_ylim([-max_value/const.au, max_value/const.au])
-        # ax.set_zlim([-max_value/const.au, max_value/const.au])
+        # --- Axes limits ---
+        max_value = max(np.max(np.abs(np.array(traj))) for traj in data["Nominal_trajectory"])
+        ax.set_xlim([-max_value/const.au, max_value/const.au])
+        ax.set_ylim([-max_value/const.au, max_value/const.au])
+        ax.set_zlim([-max_value/const.au, max_value/const.au])
         ax.set_xlabel("x [AU]")
         ax.set_ylabel("y [AU]")
         ax.set_zlabel("z [AU]")
 
-        ax.legend()
-        plt.title({info['used_obs']})
+        # --- Grouped Legends ---
+        comet_legend = [
+            Line2D([0], [0], color='black', lw=1.2, label='Nasa JPL SBDB Fit'),
+            Line2D([0], [0], color='red', lw=1.2, linestyle=":", label='Synthetic Observations Fit'),
+            Line2D([0], [0], color='gray', lw=1.2, linestyle=":", label='Monte carlo samples')
+
+        ]
+        planet_legend = [h for h, lbl in planet_handles]
+        moon_legend = [h for h, lbl in moon_handles]
+
+        leg1 = ax.legend(handles=comet_legend, loc='upper left', title="Comet Orbits", fontsize=8)
+        leg2 = ax.legend(planet_legend, [lbl for _, lbl in planet_handles],
+                        loc='upper right', title="Planets", fontsize=8)
+        leg3 = ax.legend(moon_legend, [lbl for _, lbl in moon_handles],
+                        loc='lower left', title="Moons", fontsize=7, ncol=2)
+
+        ax.add_artist(leg1)
+        ax.add_artist(leg2)
+        ax.add_artist(leg3)
+
+        plt.title(f"{n_clones} Monte Carlo samples of comet {info['Body']} — {info['used_obs']} observations")
+        plt.savefig(f"{base_path}/{comet}_3D_trajectory.pdf", dpi=300)
+
         plt.show()
 
-    # plot_ensemble(data, n_clones=20)
+    # plot_ensemble(data,info, n_clones=100)
 
-    if simulator == 'TUDAT_':
-        mask = Family['Nominal_norm']/const.au <= 1.2
-        if np.any(mask):
-            idx_1AU = np.argmax(mask)
-            time = data['Nominal_trajectory_times'][idx_1AU]
+    def diff_orbit_fits(data):
         
-        time_JD = time_representation.seconds_since_epoch_to_julian_day(time)
-        time_1AU = Time(time_JD, format='jd', scale='utc') 
+        JPL_elements = data["Nominal_trajectory"]
+        Fit_elements = data["Nominal_trajectory_fit"]
+        plt.figure(figsize=(8,5))
+        plt.title(f'{info["Body"]},{info["N_valid_clones"]},{info["used_obs"]}')
 
-        last_obs_str = info["Sim_time"].get("last obs")
-        last_obs = Time(last_obs_str, format='isot', scale='utc')
+        plt.plot(np.linalg.norm(JPL_elements[:,:3],axis=1)/const.au,np.linalg.norm(JPL_elements[:,:3],axis=1)/const.au,linestyle="-",color="black")
+        plt.plot(np.linalg.norm(Fit_elements[:,:3],axis=1)/const.au,np.linalg.norm(JPL_elements[:,:3],axis=1)/const.au,linestyle=":",color="red")
 
-        t1_tdb = time_1AU.tdb
-        t2_tdb = last_obs.tdb
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.show()
 
-        dt_days = (t1_tdb - t2_tdb).to('day').value
-        dt_days = round(dt_days, 3)
+    # diff_orbit_fits(data)
 
-        times_sec = np.array(data['Nominal_trajectory_times']).flatten() 
-        r_norm = np.array(Family['Nominal_norm']) / const.au
+    mask = Family['Nominal_norm']/const.au <= 1.2
+    if np.any(mask):
+        idx_1AU = np.argmax(mask)
+        time = data['Nominal_trajectory_times'][idx_1AU]
+    
+    time_JD = time_representation.modified_julian_day_to_julian_day(time)
+    time_1AU = Time(time_JD, format='jd', scale='utc') 
 
-        t_obs_sec = time_representation.iso_string_to_epoch(str(t2_tdb))
+    last_obs_str = info["Sim_time"].get("last obs")
+    last_obs = Time(last_obs_str, format='isot', scale='utc')
 
-        r_obs_AU = np.interp(t_obs_sec, times_sec, r_norm)
-        
-        perihelion_str = info["Sim_time"].get("End_iso")
-        last_obs_str = info["Sim_time"].get("last obs")
+    t1_tdb = time_1AU.tdb
+    t2_tdb = last_obs.tdb
 
-        perihelion = datetime.fromisoformat(perihelion_str.replace("Z", "+00:00"))
-        last_obs = datetime.fromisoformat(last_obs_str.replace("Z", "+00:00"))
+    dt_days = (t1_tdb - t2_tdb).to('day').value
+    dt_days = round(dt_days, 3)
 
-        dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3)
+    times_MJD = np.array(data['Nominal_trajectory_times']).flatten()
 
-    else:
-        mask = Family['Nominal_norm']/const.au <= 1.2
-        if np.any(mask):
-            idx_1AU = np.argmax(mask)
-            time = data['Nominal_trajectory_times'][idx_1AU]
-        
-        time_JD = time_representation.modified_julian_day_to_julian_day(time)
-        time_1AU = Time(time_JD, format='jd', scale='utc') 
+    r_norm = np.array(Family['Nominal_norm']) / const.au
 
-        last_obs_str = info["Sim_time"].get("last obs")
-        last_obs = Time(last_obs_str, format='isot', scale='utc')
+    t_obs_MJD= t2_tdb.mjd
 
-        t1_tdb = time_1AU.tdb
-        t2_tdb = last_obs.tdb
+    r_obs_AU = np.interp(t_obs_MJD, times_MJD, r_norm)
+    
+    perihelion_str = info["Sim_time"].get("End_iso")
+    last_obs_str = info["Sim_time"].get("last obs")
 
-        dt_days = (t1_tdb - t2_tdb).to('day').value
-        dt_days = round(dt_days, 3)
+    perihelion = datetime.fromisoformat(perihelion_str.replace("Z", "+00:00"))
+    last_obs = datetime.fromisoformat(last_obs_str.replace("Z", "+00:00"))
 
-        times_MJD = np.array(data['Nominal_trajectory_times']).flatten()
-
-        r_norm = np.array(Family['Nominal_norm']) / const.au
-
-        t_obs_MJD= t2_tdb.mjd
-
-        r_obs_AU = np.interp(t_obs_MJD, times_MJD, r_norm)
-        
-        perihelion_str = info["Sim_time"].get("End_iso")
-        last_obs_str = info["Sim_time"].get("last obs")
-
-        perihelion = datetime.fromisoformat(perihelion_str.replace("Z", "+00:00"))
-        last_obs = datetime.fromisoformat(last_obs_str.replace("Z", "+00:00"))
-
-        dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3)   
+    dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3)   
 
     if comet not in general_statistics["Clone_Divergence_Norm_peri"]:
         general_statistics["Clone_Divergence_Norm_peri"][comet] = {}
@@ -283,14 +313,27 @@ for sim_folder in sorted(os.listdir(comet_path)):
     obs_scatter.setdefault("Date", {}).setdefault(comet, []).append(last_obs_str)
     obs_scatter.setdefault("Helio", {}).setdefault(comet, []).append(r_obs_AU)
 
+    valid_clone_dict.setdefault("N_obs", {}).setdefault(comet, []).append(info['used_obs'])
+    valid_clone_dict.setdefault("N_clones", {}).setdefault(comet, []).append(info['N_clones'])
+    valid_clone_dict.setdefault("N_valid_clones", {}).setdefault(comet, []).append(info['N_valid_clones'])
 
 # ---------------------------------------------------------------------------------------------
-# NOTE: MANUALLY CHANGE THE INPUT FILE FOR THE DIFF_ORBIT
 def diff_orbit_fits():
-    with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_data.pkl", "rb") as f:
-        data = pickle.load(f)
-    with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_Info.pkl", "rb") as f:
-        info = pickle.load(f)
+    if comet == "C2001Q4":
+        with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    elif comet == "C2008A1":
+        with open("Pedro Lacerda/data_C2008A1/Simulation_25/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2008A1/Simulation_25/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    else:
+        with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
     
     JPL_elements = data["Nominal_trajectory"]
     Fit_elements = data["Nominal_trajectory_fit"]
@@ -316,12 +359,109 @@ def diff_orbit_fits():
 
     fig.suptitle(f'Difference between fitted state vector and JPL fitted, {info["used_obs"]} observations')
     plt.tight_layout(rect=[0, 0, 1, 0.97])
-    plt.savefig(f"{base_path}/{simulator}Difference_{comet}.pdf", dpi=300)
+    plt.savefig(f"{base_path}/{comet}_Fit_SBDB_difference.pdf", dpi=300)
     # plt.show()
 
 diff_orbit_fits()
 
+def diff_orbit_fits():
+    if comet == "C2001Q4":
+        with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    elif comet == "C2008A1":
+        with open("Pedro Lacerda/data_C2008A1/Simulation_25/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2008A1/Simulation_25/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    else:
+        with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    
+    JPL_elements = data["Nominal_trajectory"]
+    Fit_elements = data["Nominal_trajectory_fit"]
+    plt.figure(figsize=(8,5))
+    plt.plot(np.linalg.norm(JPL_elements[:,:3],axis=1)/const.au,np.linalg.norm(JPL_elements[:,:3],axis=1)/const.au,linestyle="-",color="black")
+    plt.plot(np.linalg.norm(Fit_elements[:,:3],axis=1)/const.au,np.linalg.norm(JPL_elements[:,:3],axis=1)/const.au,linestyle=":",color="red")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    # plt.savefig(f"{base_path}/{comet}_Fit_SBDB_difference.pdf", dpi=300)
+    plt.show()
+
+diff_orbit_fits()
+
+def clone_orbits():
+    if comet == "C2001Q4":
+        with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2001Q4/Simulation_38/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    elif comet == "C2008A1":
+        with open("Pedro Lacerda/data_C2008A1/Simulation_25/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2008A1/Simulation_25/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    else:
+        with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_data.pkl", "rb") as f:
+            data = pickle.load(f)
+        with open("Pedro Lacerda/data_C2013US10/Simulation_54/Rebound_Simulation_Info.pkl", "rb") as f:
+            info = pickle.load(f)
+    
+    JPL_elements = data["Nominal_trajectory"]
+    Fit_elements = data["Nominal_trajectory_fit"]
+    Clones = data["Monte_trajectory"]
+    diff_elements = JPL_elements - Fit_elements
+    JPL_norm = np.linalg.norm(JPL_elements[:, 0:3], axis=1) 
+    Fit_norm = np.linalg.norm(Fit_elements[:,:3],axis=1)
+    fig, axs = plt.subplots(1, 1, figsize=(10, 8))
+    fig.suptitle(f'Difference to JPL SBDB, {info["used_obs"]} observations')
+    for key in Clones.keys():
+        diff_norm = np.linalg.norm(JPL_elements[:,0:3]-Clones[key][:, 0:3],axis=1)
+        fit_jpl_dif = np.linalg.norm(diff_elements, axis=1) 
+        axs.plot(JPL_norm/const.au,diff_norm/1000)
+    axs.plot(JPL_norm/const.au,fit_jpl_dif/1000,label='Fitted orbit',color="black",linewidth=3.0)
+    axs.invert_xaxis()
+    plt.legend()
+    plt.xlabel(f"Heliocentric distance [AU]")
+    plt.ylabel(f"Divergence [km]")
+    plt.grid()
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.savefig(f"{base_path}/{comet}_Clone_difference.pdf", dpi=300)
+    plt.show()
+
+clone_orbits()
+
+def valid_clones_plot(valid_clone_dict):
+    N_obs = np.array(valid_clone_dict["N_obs"][comet], dtype=float)
+    N_clones = np.array(valid_clone_dict["N_clones"][comet], dtype=float)
+    N_valid_clones = np.array(valid_clone_dict["N_valid_clones"][comet], dtype=float)
+
+    valid_percent = (N_valid_clones / N_clones) * 100
+
+    sort_idx = np.argsort(N_obs)
+    N_obs = N_obs[sort_idx]
+    valid_percent = valid_percent[sort_idx]
+
+    plt.figure(figsize=(8,5))
+    plt.plot(N_obs, valid_percent, 'o-', linewidth=1.8, markersize=6)
+    plt.xlabel('Number of Observations', fontsize=12)
+    plt.ylabel('Valid Clones (%)', fontsize=12)
+    plt.title('Clone Validity vs. Number of Observations', fontsize=14)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.ylim(0, 105)
+
+    plt.tight_layout()
+    plt.savefig(f"{base_path}/{comet}_Valid_observations.pdf", dpi=300)
+    plt.show()
+
+valid_clones_plot(valid_clone_dict)
+
 # ---------------------------------------------------------------------------------------------
+extra_time = 15
+
 divergence = general_statistics["Clone_Divergence_Norm_peri"][comet]
 dt = sorted(divergence.keys(), reverse=True)
 
@@ -343,7 +483,7 @@ for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
     patch.set_alpha(0.6)
 
-time = np.arange(max(dt),min(dt)-20,-20)
+time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 plt.xticks(time,rotation=70)
 plt.gca().invert_xaxis()
@@ -356,7 +496,7 @@ plt.title(
 )
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(f"{base_path}/{simulator}boxplot_{comet}_POS_Peri.pdf", dpi=300)
+plt.savefig(f"{base_path}/{comet}_boxplot_POS_Peri.pdf", dpi=300)
 # plt.show()
 
 # ---------------------------------------------------------------------------------------------
@@ -374,12 +514,11 @@ box = plt.boxplot(
     patch_artist=True,
     manage_ticks=False
 )
+time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
     patch.set_alpha(0.6)
-
-time = np.arange(max(dt),min(dt)-20,-20)
 
 plt.xticks(time,rotation=70)
 plt.gca().invert_xaxis()
@@ -390,7 +529,7 @@ plt.xlabel(r"$\Delta{Days}$")
 plt.title(f"Clone Velocity Divergence vs. Days to Perihelion {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(f'{base_path}/{simulator}boxplot_{comet}_VEL_Peri.pdf',dpi=300)
+plt.savefig(f'{base_path}/{comet}_boxplot_VEL_Peri.pdf',dpi=300)
 # plt.show()
 # ---------------------------------------------------------------------------------------------
 
@@ -408,12 +547,11 @@ box = plt.boxplot(
     patch_artist=True,
     manage_ticks=False
 )
+time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
     patch.set_alpha(0.6)
-
-time = np.arange(max(dt),min(dt)-20,-20)
 
 plt.xticks(time,rotation=70)
 plt.gca().invert_xaxis()
@@ -424,7 +562,7 @@ plt.xlabel(r"$\Delta{Days}$")
 plt.title(f"Clone Velocity Divergence vs. Days to 1.2 AU {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(f'{base_path}/{simulator}boxplot_{comet}_POS_AU.pdf',dpi=300)
+plt.savefig(f'{base_path}/{comet}_boxplot_POS_AU.pdf',dpi=300)
 # plt.show()
 
 # ---------------------------------------------------------------------------------------------
@@ -448,7 +586,7 @@ for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
     patch.set_alpha(0.6)
 
-time = np.arange(max(dt),min(dt)-20,-20)
+time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 plt.xticks(time,rotation=70)
 plt.gca().invert_xaxis()
@@ -459,7 +597,7 @@ plt.xlabel(r"$\Delta{Days}$")
 plt.title(f"Clone Velocity Divergence vs. Days to 1.2 AU {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
-plt.savefig(f'{base_path}/{simulator}boxplot_{comet}_VEL_AU.pdf',dpi=300)
+plt.savefig(f'{base_path}/{comet}_boxplot_VEL_AU.pdf',dpi=300)
 # plt.show()
 
 dates_str = obs_scatter["Date"][comet]
@@ -485,7 +623,7 @@ ax.grid(True, alpha=0.3)
 fig.autofmt_xdate()
 plt.legend()
 plt.tight_layout()
-plt.savefig(f'{base_path}/{simulator}scatter_{comet}_Obsdate_AU.pdf',dpi=300)
+plt.savefig(f'{base_path}/{comet}_Observation_scatter.pdf',dpi=300)
 
 
 

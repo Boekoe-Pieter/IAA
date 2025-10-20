@@ -168,28 +168,47 @@ for body in all_results:
     # ----------------------------------------------------------------------
     bodies_to_create = [
         "Sun",
+
         "Mercury",
+
         "Venus",
 
         "Earth",
-        "Moon",
+         "Moon",
 
         "Mars",
-        'Phobos',
-        'Deimos',
+         "Phobos",
+         "Deimos",
+
+        # "Ceres",
+
+        # "Vesta",
 
         "Jupiter",
-        'Europa',
-        'Ganymede',
-        'Io',
-        'Callisto',
+         "Io",
+         "Europa",
+         "Ganymede",
+         "Callisto",
 
         "Saturn",
-        'Titan',
-        'Enceladus',
+         "Titan",
+         "Rhea",
+         "Iapetus",
+         "Dione",
+         "Tethys",
+         "Enceladus",
+         "Mimas",
 
         "Uranus",
+         "Miranda",
+         "Ariel",
+         "Umbriel",
+         "Titania",
+         "Oberon", 
+
         "Neptune",
+         "Triton"
+
     ]
 
     # Create system of bodies
@@ -198,12 +217,6 @@ for body in all_results:
     )
 
     body_settings.add_empty_settings(str(spkid))
-    # body_settings.get(str(spkid)).ephemeris_settings = environment_setup.ephemeris.direct_spice(
-    #     global_frame_origin,
-    #     global_frame_orientation,
-    #     str(spkid)
-    # )
-
     bodies = environment_setup.create_system_of_bodies(body_settings)
 
     central_bodies = [global_frame_origin]

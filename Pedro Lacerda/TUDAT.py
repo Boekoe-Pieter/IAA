@@ -25,7 +25,7 @@ np.set_printoptions(linewidth=160)
 
 # ----------------------------------------------------------------------
 # General Sim data
-N_samples = 1000
+N_samples = 10
 
 Integrator = 'rkf89'
 Integrator_type = 'Fixed step, Higherorder'
@@ -80,6 +80,11 @@ for comet, data in files_dict.items():
         # target body
         body = total_data.get("ids")[0]
 
+        start_time = covar_states["epoch"]
+        end_time = total_data["objects"][body]["elements"].get("Tp")
+        start_time_SJD = time_representation.julian_day_to_seconds_since_epoch(start_time)
+        end_time_SJD = time_representation.julian_day_to_seconds_since_epoch(end_time)
+
         #SBDB Method
         target_sbdb = SBDBquery(body,full_precision=True)
 
@@ -92,12 +97,11 @@ for comet, data in files_dict.items():
         M = target_sbdb["orbit"]['elements'].get('ma').value
         n = target_sbdb["orbit"]['elements'].get('n').value
         Tp = total_data["objects"][body]["elements"].get("Tp")
-
-        start_time = covar_states["epoch"]
-        end_time = total_data["objects"][body]["elements"].get("Tp")
-        start_time_SJD = time_representation.julian_day_to_seconds_since_epoch(start_time)
-        end_time_SJD = time_representation.julian_day_to_seconds_since_epoch(end_time)
-
+        Shifter = time_representation.julian_day_to_seconds_since_epoch(Tp)
+        "Convert the mean anomaly given by SBDB from the given date to the wanted starting position"
+        delta_t = Shifter-start_time_SJD
+        M0=M-n*delta_t/constants.JULIAN_DAY #M in degrees, n in deg/day delta_t in seconds automatically uses hyperbolic if e>1
+        true_anomaly_start = element_conversion.mean_to_true_anomaly(e, np.deg2rad(M0))
 
         # Monte carlo sampling
         initial_conditions_AU = np.array(covar_states["state_vect"])
@@ -227,12 +231,6 @@ for comet, data in files_dict.items():
         # ----------------------------------------------------------------------
         # Define integrator and propagator
         # ----------------------------------------------------------------------
-        "Convert the mean anomaly given by SBDB from the given date to the wanted starting position"
-        delta_t = end_time_SJD-start_time_SJD
-        M0=M-n*delta_t/constants.JULIAN_DAY #M in degrees, n in deg/day delta_t in seconds automatically uses hyperbolic if e>1
-
-        true_anomaly_start = element_conversion.mean_to_true_anomaly(e, np.deg2rad(M0))
-
         initial_state = element_conversion.keplerian_to_cartesian_elementwise(
             gravitational_parameter=bodies.get("Sun").gravitational_parameter,
             semi_major_axis=a*constants.ASTRONOMICAL_UNIT,

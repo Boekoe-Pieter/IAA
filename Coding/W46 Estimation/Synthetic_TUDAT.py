@@ -24,6 +24,7 @@ import json
 import base64
 import requests
 
+np.set_printoptions(linewidth=160)
 # ----------------------------------------------------------------------
 # Define saving directories
 # ----------------------------------------------------------------------
@@ -71,6 +72,8 @@ for sbclass in classes:
     response = requests.get(url, params=request_dict)
     if response.ok:
         all_results.extend(response.json().get("data", []))
+
+all_results = ["C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     target_mpc_code = body
@@ -160,6 +163,15 @@ for body in all_results:
     
     spice.clear_kernels()
     spice.load_standard_kernels()
+    spice.load_kernel("Coding/Spice_files/gm_Horizons.pck")
+    spice.load_kernel("Coding/Spice_files/de441_part-1.bsp")
+    spice.load_kernel("Coding/Spice_files/de441_part-2.bsp")
+    spice.load_kernel("Coding/Spice_files/sb441-n16.bsp")
+    spice.load_kernel("Coding/Spice_files/ura184_part-1.bsp")
+    spice.load_kernel("Coding/Spice_files/ura184_part-2.bsp")
+    spice.load_kernel("Coding/Spice_files/ura184_part-3.bsp")
+    spice.load_kernel("Coding/Spice_files/nep097.bsp")
+    spice.load_kernel("Coding/Spice_files/plu060.bsp")
     spice.load_kernel(f"Coding/Spice_files/{spkid}.bsp")
 
     # ----------------------------------------------------------------------
@@ -167,28 +179,47 @@ for body in all_results:
     # ----------------------------------------------------------------------
     bodies_to_create = [
         "Sun",
+
         "Mercury",
+
         "Venus",
 
         "Earth",
-        "Moon",
+         "Moon",
 
         "Mars",
-        'Phobos',
-        'Deimos',
+         "Phobos",
+         "Deimos",
 
+        "Ceres",
+        "Vesta",
+        
         "Jupiter",
-        'Europa',
-        'Ganymede',
-        'Io',
-        'Callisto',
+         "Io",
+         "Europa",
+         "Ganymede",
+         "Callisto",
 
         "Saturn",
-        'Titan',
-        'Enceladus',
+         "Titan",
+         "Rhea",
+         "Iapetus",
+         "Dione",
+         "Tethys",
+         "Enceladus",
+         "Mimas",
 
         "Uranus",
+         "Miranda",
+         "Ariel",
+         "Umbriel",
+         "Titania",
+         "Oberon", 
+
         "Neptune",
+         "Triton",
+        
+        "Pluto",
     ]
 
     # Create system of bodies
@@ -197,179 +228,10 @@ for body in all_results:
     )
 
     body_settings.add_empty_settings(str(spkid))
-    body_settings.get(str(spkid)).ephemeris_settings = environment_setup.ephemeris.direct_spice(
-        global_frame_origin,
-        global_frame_orientation,
-        str(spkid)
-    )
 
     bodies = environment_setup.create_system_of_bodies(body_settings)
     central_bodies = [global_frame_origin]
     
-    # ----------------------------------------------------------------------
-    # Define accelerations on the body of interest
-    # ----------------------------------------------------------------------
-    "Creating the reference orbit will have all accelerations acting on the comet,"
-    "note: the NGA's are JPL fitted THESE CANT BE REUSED WHEN ESTIMATING THE ORBIT"
-
-    def NGA(time: float) -> np.ndarray:
-        state = bodies.get(str(spkid)).state
-        r_vec = state[:3]
-        v_vec = state[3:]
-
-        r_norm = np.linalg.norm(r_vec)
-
-        m = 2.15
-        n = 5.093
-        k = 4.6142
-        r0 = 2.808*constants.ASTRONOMICAL_UNIT
-        alpha = 0.1113
-
-        A1, A2, A3 = param_dict['A1'],param_dict['A2'],param_dict['A3']
-        A_vec = np.array([A1, A2, A3])
-
-        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
-
-        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
-
-        F_vec_rtn = g * A_vec
-        F_vec_inertial = C_rtn2eci @ F_vec_rtn
-
-        return F_vec_inertial  
-
-    def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
-        r_hat = r_vec / np.linalg.norm(r_vec)
-        h_vec = np.cross(r_vec, v_vec)
-        h_hat = h_vec / np.linalg.norm(h_vec)
-        t_hat = np.cross(h_hat, r_hat)
-
-        C = np.vstack((r_hat, t_hat, h_hat)).T
-        return C
-
-    accelerations = {
-        "Sun": [
-            propagation_setup.acceleration.point_mass_gravity(),
-            propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
-
-        ],
-
-        "Mercury": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Venus": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Earth": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Moon": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Mars": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Phobos": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Deimos": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-
-        "Jupiter": [
-            propagation_setup.acceleration.point_mass_gravity(),
-            propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
-        ],
-        "Ganymede": [propagation_setup.acceleration.point_mass_gravity()],
-        "Europa": [propagation_setup.acceleration.point_mass_gravity()],
-        "Callisto": [propagation_setup.acceleration.point_mass_gravity()],
-        "Io": [propagation_setup.acceleration.point_mass_gravity()],
-
-        "Saturn": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Enceladus": [propagation_setup.acceleration.point_mass_gravity()],
-        "Titan": [propagation_setup.acceleration.point_mass_gravity()],
-
-        "Uranus": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Neptune": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        
-        str(spkid): [propagation_setup.acceleration.custom_acceleration(NGA)]
-    }
-
-    bodies_to_propagate = [str(spkid)]
-    acceleration_settings = {}
-    acceleration_settings[str(spkid)] = accelerations
-
-    # create the acceleration models.
-    acceleration_models = propagation_setup.create_acceleration_models(
-        bodies, acceleration_settings, bodies_to_propagate, central_bodies
-    )
-
-    integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
-            time_step = timestep_global,
-            coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
-            order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
-
-    termination_condition = propagation_setup.propagator.time_termination(SSE_end_buffer)
-
-    initial_state = spice.get_body_cartesian_state_at_epoch(
-        str(spkid),
-        global_frame_origin,
-        global_frame_orientation,
-        "NONE",
-        SSE_start_buffer,
-    )
-
-    dependent_variables_to_save = [
-        propagation_setup.dependent_variable.relative_position("Mercury", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Venus", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Earth", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Mars", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Jupiter", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Saturn", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Uranus", "Sun"),
-        propagation_setup.dependent_variable.relative_position("Neptune", "Sun"),
-        propagation_setup.dependent_variable.keplerian_state(str(spkid), "Sun"),
-        propagation_setup.dependent_variable.central_body_fixed_cartesian_position(str(spkid), "Sun"),
-        propagation_setup.dependent_variable.relative_position(str(spkid), "Sun"),
-        propagation_setup.dependent_variable.relative_velocity(str(spkid), "Sun"),                                
-        ]
-
-    propagator_settings = propagation_setup.propagator.translational(
-        central_bodies=central_bodies,
-        acceleration_models=acceleration_models,
-        bodies_to_integrate=bodies_to_propagate,
-        initial_states=initial_state,
-        initial_time=SSE_start_buffer,
-        integrator_settings=integrator_settings,
-        termination_settings=termination_condition,
-        output_variables=dependent_variables_to_save, 
-    )
-
-    dynamics_simulator_reference = simulator.create_dynamics_simulator(
-        bodies, propagator_settings
-    )
-
-    propagated_state_history = dynamics_simulator_reference.state_history
-
-    body_settings.get(str(spkid)).ephemeris_settings = environment_setup.ephemeris.tabulated(
-        dict(propagated_state_history),
-        global_frame_origin,
-        global_frame_orientation
-        )
-
-    bodies = environment_setup.create_system_of_bodies(body_settings)
-
     # ----------------------------------------------------------------------
     # Define Observatory
     # ----------------------------------------------------------------------
@@ -405,7 +267,7 @@ for body in all_results:
     observation_settings_list = [observable_models_setup.model_settings.angular_position(link_definition)]
 
     observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
-    
+    # observation_times = np.linspace(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, 167)
     observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
         observable_models_setup.model_settings.angular_position_type,
         link_definition,
@@ -427,40 +289,39 @@ for body in all_results:
     # Define accelerations on the body of interest
     # ----------------------------------------------------------------------
     "We re-define the accelerations on the comet, and redefine the NGA defenition as we now want to estimate the A1,A2,A3 parameters"
-    # def NGA(time: float) -> np.ndarray:
-    #     state = bodies.get(str(spkid)).state
-    #     r_vec = state[:3]
-    #     print(f"hi{r_vec}")
+    def NGA(time: float) -> np.ndarray:
+        state = bodies.get(str(spkid)).state
+        r_vec = state[:3]
 
-    #     v_vec = state[3:]
+        v_vec = state[3:]
 
-    #     r_norm = np.linalg.norm(r_vec)
+        r_norm = np.linalg.norm(r_vec)
 
-    #     m = 2.15
-    #     n = 5.093
-    #     k = 4.6142
-    #     r0 = 2.808*constants.ASTRONOMICAL_UNIT
-    #     alpha = 0.1113
+        m = 2.15
+        n = 5.093
+        k = 4.6142
+        r0 = 2.808*constants.ASTRONOMICAL_UNIT
+        alpha = 0.1113
 
-    #     A_vec = custom_parameter
+        A_vec = get_custom_parameter()
 
-    #     g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
 
-    #     C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
 
-    #     F_vec_rtn = g * A_vec
-    #     F_vec_inertial = C_rtn2eci @ F_vec_rtn
+        F_vec_rtn = g * A_vec
+        F_vec_inertial = C_rtn2eci @ F_vec_rtn
 
-    #     return F_vec_inertial  
+        return F_vec_inertial  
 
-    # def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
-    #     r_hat = r_vec / np.linalg.norm(r_vec)
-    #     h_vec = np.cross(r_vec, v_vec)
-    #     h_hat = h_vec / np.linalg.norm(h_vec)
-    #     t_hat = np.cross(h_hat, r_hat)
+    def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
+        r_hat = r_vec / np.linalg.norm(r_vec)
+        h_vec = np.cross(r_vec, v_vec)
+        h_hat = h_vec / np.linalg.norm(h_vec)
+        t_hat = np.cross(h_hat, r_hat)
 
-    #     C = np.vstack((r_hat, t_hat, h_hat)).T
-    #     return C
+        C = np.vstack((r_hat, t_hat, h_hat)).T
+        return C
 
     accelerations = {
         "Sun": [
@@ -468,75 +329,74 @@ for body in all_results:
             propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
         ],
 
-        "Mercury": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        
-        "Venus": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
+        "Mercury": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Venus": [propagation_setup.acceleration.point_mass_gravity()],
         
         "Earth": [
             propagation_setup.acceleration.point_mass_gravity(),
         ],
-        "Moon": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
+        "Moon": [propagation_setup.acceleration.point_mass_gravity()],
 
-        "Mars": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Phobos": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Deimos": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
+        "Mars": [propagation_setup.acceleration.point_mass_gravity()],
+        "Phobos": [propagation_setup.acceleration.point_mass_gravity()],
+        "Deimos": [propagation_setup.acceleration.point_mass_gravity()],
 
-        "Jupiter": [
-            propagation_setup.acceleration.point_mass_gravity(),
-            propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
-        ],
-        "Ganymede": [
-            propagation_setup.acceleration.point_mass_gravity()],
-        "Europa": [
-            propagation_setup.acceleration.point_mass_gravity()],
-        "Callisto": [
-            propagation_setup.acceleration.point_mass_gravity()],
-        "Io": [
-            propagation_setup.acceleration.point_mass_gravity()],
+        "Jupiter": [propagation_setup.acceleration.point_mass_gravity(),
+                    propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True)],
+        "Io": [propagation_setup.acceleration.point_mass_gravity()],
+        "Europa": [propagation_setup.acceleration.point_mass_gravity()],
+        "Ganymede": [propagation_setup.acceleration.point_mass_gravity()],
+        "Callisto": [propagation_setup.acceleration.point_mass_gravity()],
 
-        "Saturn": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Enceladus": [
-            propagation_setup.acceleration.point_mass_gravity()],
-        "Titan": [
-            propagation_setup.acceleration.point_mass_gravity()],
+        "Saturn": [propagation_setup.acceleration.point_mass_gravity(),
+                propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True)],
+        "Titan": [propagation_setup.acceleration.point_mass_gravity()],
+        "Rhea": [propagation_setup.acceleration.point_mass_gravity()],
+        "Iapetus": [propagation_setup.acceleration.point_mass_gravity()],
+        "Dione": [propagation_setup.acceleration.point_mass_gravity()],
+        "Tethys": [propagation_setup.acceleration.point_mass_gravity()],
+        "Enceladus": [propagation_setup.acceleration.point_mass_gravity()],
+        "Mimas": [propagation_setup.acceleration.point_mass_gravity()],
 
-        "Uranus": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
-        "Neptune": [
-            propagation_setup.acceleration.point_mass_gravity(),
-        ],
+        "Uranus": [propagation_setup.acceleration.point_mass_gravity()],
+        "Miranda": [propagation_setup.acceleration.point_mass_gravity()],
+        "Ariel": [propagation_setup.acceleration.point_mass_gravity()],
+        "Umbriel": [propagation_setup.acceleration.point_mass_gravity()],
+        "Titania": [propagation_setup.acceleration.point_mass_gravity()],
+        "Oberon": [propagation_setup.acceleration.point_mass_gravity()],
 
-        # str(spkid): [
-        #     propagation_setup.acceleration.custom_acceleration(NGA)] 
-        }
+        "Neptune": [propagation_setup.acceleration.point_mass_gravity()],
+        "Triton": [propagation_setup.acceleration.point_mass_gravity()],
+    
+        "Ceres": [propagation_setup.acceleration.point_mass_gravity()],
+        "Vesta": [propagation_setup.acceleration.point_mass_gravity()],
+        "Pluto": [propagation_setup.acceleration.point_mass_gravity()],
+
+        str(spkid): [propagation_setup.acceleration.custom_acceleration(NGA)]
+    }
 
     bodies_to_propagate = [str(spkid)]
-    acceleration_settings = {}
-    acceleration_settings[str(spkid)] = accelerations
-    
+    acceleration_settings = {str(spkid): accelerations}
+
     # create the acceleration models.
     termination_condition = propagation_setup.propagator.time_termination(SSE_end_buffer)
 
-    integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
-            time_step = timestep_global,
-            coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
-            order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
-
+    # integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
+    #         time_step = timestep_global,
+    #         coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_89,
+    #         order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
+    
+    integrator_settings = propagation_setup.integrator.runge_kutta_variable_step_size(
+        SSE_start_buffer,
+        timestep_global,
+        propagation_setup.integrator.CoefficientSets.rkf_78,
+        timestep_global,
+        timestep_global,
+        1.0,
+        1.0,
+ )
+    
     initial_state = spice.get_body_cartesian_state_at_epoch(
         str(spkid),
         global_frame_origin,
@@ -568,50 +428,52 @@ for body in all_results:
     # Define the parameters to be estimated
     # ----------------------------------------------------------------------
     "Here we define the parameters to be estimated,the initial state and NGAs A1,A2,A3"
-    # def compute_current_custom_parameter_partial(time, state):
-    #     r_vec = state[:3]
-    #     v_vec = state[3:]
-    #     r_norm = np.linalg.norm(r_vec)
 
-    #     m = 2.15
-    #     n = 5.093
-    #     k = 4.6142
-    #     r0 = 2.808*constants.ASTRONOMICAL_UNIT
-    #     alpha = 0.1113
+    def compute_current_custom_parameter_partial(time: float,state: float) -> np.ndarray:
+        state = bodies.get(str(spkid)).state
+        r_vec = state[:3]
+        v_vec = state[3:]
+        r_norm = np.linalg.norm(r_vec)
 
-    #     g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
-    #     C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+        m = 2.15
+        n = 5.093
+        k = 4.6142
+        r0 = 2.808*constants.ASTRONOMICAL_UNIT
+        alpha = 0.1113
 
-    #     current_custom_parameter_partial = g * C_rtn2eci  
+        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
 
-    #     return current_custom_parameter_partial
+        current_custom_parameter_partial = g * C_rtn2eci  
+
+        return current_custom_parameter_partial
     
-    # custom_parameter = np.array([A1, A2, A3])  # JPL as Guess
+    custom_parameter = np.array([A1,A2,A3]) 
 
-    # def get_custom_parameter():
-    #     return custom_parameter #Get the parameter values
+    def get_custom_parameter():
+        return custom_parameter #Get the parameter values
 
-    # def set_custom_parameter(estimated_value):
-    #     global custom_parameter
-    #     custom_parameter = np.array(estimated_value)  #Update the guess
+    def set_custom_parameter(estimated_value):
+        global custom_parameter
+        custom_parameter = np.array(estimated_value)  #Update the guess
 
     parameter_settings = parameters_setup.initial_states(propagator_settings, bodies)
     
-    # parameter_settings.append(
-    #     parameters_setup.custom_parameter(
-    #         'NGA', 3, get_custom_parameter,
-    #         set_custom_parameter
-    #     )
-    # )
+    parameter_settings.append(
+        parameters_setup.custom_parameter(
+            'NGA', 3, get_custom_parameter,
+            set_custom_parameter
+        )
+    )
 
-    # parameter_settings[-1].custom_partial_settings = [
-    #     parameters_setup.custom_analytical_partial(
-    #         compute_current_custom_parameter_partial,
-    #         str(spkid),
-    #         str(spkid),
-    #         propagation_setup.acceleration.AvailableAcceleration.custom_acceleration_type
-    #     )
-    # ]
+    parameter_settings[-1].custom_partial_settings = [
+        parameters_setup.custom_analytical_partial(
+            compute_current_custom_parameter_partial,
+            str(spkid),
+            str(spkid),
+            propagation_setup.acceleration.AvailableAcceleration.custom_acceleration_type
+        )
+    ]
 
     parameters_to_estimate = parameters_setup.create_parameter_set(
         parameter_settings, bodies, propagator_settings
@@ -645,7 +507,7 @@ for body in all_results:
 
     perturbed_parameters = truth_parameters.copy()
     for i in range(3):
-        perturbed_parameters[i] += 1000.0
+        perturbed_parameters[i] += 100.0
         perturbed_parameters[i+3] += 10
 
     parameters_to_estimate.parameter_vector = perturbed_parameters
@@ -662,7 +524,22 @@ for body in all_results:
     pod_output = estimator.perform_estimation(pod_input)
     
     residual_history = pod_output.residual_history
+    
+    state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_end)
+    print("Estimated final state m & m/s")
+    print(np.array(state_est))
+    print(np.linalg.norm(np.array(state_est)[:3])/constants.ASTRONOMICAL_UNIT)
+    
+    state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
+    print("Estimated start state m & m/s:")
+    print(np.array(state_est))
+    print(np.linalg.norm(np.array(state_est)[:3])/constants.ASTRONOMICAL_UNIT)
 
+    print("Estimated NGA au/d^2:")
+    print(np.array(custom_parameter)*constants.JULIAN_DAY**2/constants.ASTRONOMICAL_UNIT)
+    print("JPL NGA au/d^2:")
+    print(np.array([A1,A2,A3])*constants.JULIAN_DAY**2/constants.ASTRONOMICAL_UNIT)
+      
     # ----------------------------------------------------------------------
     # Covariance estimation
     # ----------------------------------------------------------------------
@@ -681,7 +558,7 @@ for body in all_results:
 
     # Print the covariance matrix
     formal_errors = covariance_output.formal_errors
-    print(f'Formal Errors:\n{formal_errors}')
+    # print(f'Formal Errors:\n{formal_errors}')
 
     # ----------------------------------------------------------------------
     # ----------------------------------------------------------------------
@@ -777,59 +654,59 @@ for body in all_results:
     plt.tight_layout()
     plt.savefig(f"{directory_name}{addition}/RADEC_Aitoff.pdf", dpi=300)
 
-    # ----------------------------------------------------------------------
-    # 3D Plot
-    dep_hist = dynamics_simulator_reference.propagation_results.dependent_variable_history
+    # # ----------------------------------------------------------------------
+    # # 3D Plot
+    # dep_hist = dynamics_simulator_reference.propagation_results.dependent_variable_history
 
-    epochs = np.array(list(dep_hist.keys()))
-    dep_vals = np.vstack(list(dep_hist.values()))/constants.ASTRONOMICAL_UNIT
+    # epochs = np.array(list(dep_hist.keys()))
+    # dep_vals = np.vstack(list(dep_hist.values()))/constants.ASTRONOMICAL_UNIT
 
-    mercury_pos = dep_vals[:, 0:3]
-    venus_pos   = dep_vals[:, 3:6]
-    earth_pos   = dep_vals[:, 6:9]
-    mars_pos    = dep_vals[:, 9:12]
-    jupiter_pos = dep_vals[:, 12:15]
-    saturn_pos  = dep_vals[:, 15:18]
-    uranus_pos  = dep_vals[:, 18:21]
-    neptune_pos = dep_vals[:, 21:24]
+    # mercury_pos = dep_vals[:, 0:3]
+    # venus_pos   = dep_vals[:, 3:6]
+    # earth_pos   = dep_vals[:, 6:9]
+    # mars_pos    = dep_vals[:, 9:12]
+    # jupiter_pos = dep_vals[:, 12:15]
+    # saturn_pos  = dep_vals[:, 15:18]
+    # uranus_pos  = dep_vals[:, 18:21]
+    # neptune_pos = dep_vals[:, 21:24]
 
-    state_hist = dynamics_simulator_reference.propagation_results.state_history
-    comet_states = np.vstack(list(state_hist.values()))
-    comet_pos = comet_states[:, :3]/constants.ASTRONOMICAL_UNIT
+    # state_hist = dynamics_simulator_reference.propagation_results.state_history
+    # comet_states = np.vstack(list(state_hist.values()))
+    # comet_pos = comet_states[:, :3]/constants.ASTRONOMICAL_UNIT
 
-    fig = plt.figure(figsize=(10,8))
-    ax = fig.add_subplot(111, projection='3d')
+    # fig = plt.figure(figsize=(10,8))
+    # ax = fig.add_subplot(111, projection='3d')
 
-    ax.plot(mercury_pos[:,0], mercury_pos[:,1], mercury_pos[:,2], label="Mercury")
-    ax.plot(venus_pos[:,0],   venus_pos[:,1],   venus_pos[:,2],   label="Venus")
-    ax.plot(earth_pos[:,0],   earth_pos[:,1],   earth_pos[:,2],   label="Earth")
-    ax.plot(mars_pos[:,0],    mars_pos[:,1],    mars_pos[:,2],    label="Mars")
-    ax.plot(jupiter_pos[:,0], jupiter_pos[:,1], jupiter_pos[:,2], label="Jupiter")
-    ax.plot(saturn_pos[:,0],  saturn_pos[:,1],  saturn_pos[:,2],  label="Saturn")
-    ax.plot(uranus_pos[:,0],  uranus_pos[:,1],  uranus_pos[:,2],  label="Uranus")
-    ax.plot(neptune_pos[:,0], neptune_pos[:,1], neptune_pos[:,2], label="Neptune")
+    # ax.plot(mercury_pos[:,0], mercury_pos[:,1], mercury_pos[:,2], label="Mercury")
+    # ax.plot(venus_pos[:,0],   venus_pos[:,1],   venus_pos[:,2],   label="Venus")
+    # ax.plot(earth_pos[:,0],   earth_pos[:,1],   earth_pos[:,2],   label="Earth")
+    # ax.plot(mars_pos[:,0],    mars_pos[:,1],    mars_pos[:,2],    label="Mars")
+    # ax.plot(jupiter_pos[:,0], jupiter_pos[:,1], jupiter_pos[:,2], label="Jupiter")
+    # ax.plot(saturn_pos[:,0],  saturn_pos[:,1],  saturn_pos[:,2],  label="Saturn")
+    # ax.plot(uranus_pos[:,0],  uranus_pos[:,1],  uranus_pos[:,2],  label="Uranus")
+    # ax.plot(neptune_pos[:,0], neptune_pos[:,1], neptune_pos[:,2], label="Neptune")
 
-    ax.plot(comet_pos[:,0], comet_pos[:,1], comet_pos[:,2], "k-", linewidth=1, label=f"{name}")
-    ax.scatter(comet_pos[0,0], comet_pos[0,1], comet_pos[0,2], color="green", marker="o", s=10)
-    ax.scatter(comet_pos[-1,0], comet_pos[-1,1], comet_pos[-1,2], color="red", marker="x", s=10)
+    # ax.plot(comet_pos[:,0], comet_pos[:,1], comet_pos[:,2], "k-", linewidth=1, label=f"{name}")
+    # ax.scatter(comet_pos[0,0], comet_pos[0,1], comet_pos[0,2], color="green", marker="o", s=10)
+    # ax.scatter(comet_pos[-1,0], comet_pos[-1,1], comet_pos[-1,2], color="red", marker="x", s=10)
 
-    ax.set_xlabel("x [AU]")
-    ax.set_ylabel("y [AU]")
-    ax.set_zlabel("z [AU]")
-    ax.legend()
+    # ax.set_xlabel("x [AU]")
+    # ax.set_ylabel("y [AU]")
+    # ax.set_zlabel("z [AU]")
+    # ax.legend()
 
-    max_range = np.array([comet_pos[:,0].max()-comet_pos[:,0].min(),
-                        comet_pos[:,1].max()-comet_pos[:,1].min(),
-                        comet_pos[:,2].max()-comet_pos[:,2].min()]).max() / 2.0
-    mid_x = (comet_pos[:,0].max()+comet_pos[:,0].min()) * 0.5
-    mid_y = (comet_pos[:,1].max()+comet_pos[:,1].min()) * 0.5
-    mid_z = (comet_pos[:,2].max()+comet_pos[:,2].min()) * 0.5
-    ax.set_xlim(mid_x - max_range, mid_x + max_range)
-    ax.set_ylim(mid_y - max_range, mid_y + max_range)
-    ax.set_zlim(mid_z - max_range, mid_z + max_range)
-    plt.savefig(f"{directory_name}{addition}/3D_plot.pdf", dpi=300)
-    # plt.show()
-    plt.close()
+    # max_range = np.array([comet_pos[:,0].max()-comet_pos[:,0].min(),
+    #                     comet_pos[:,1].max()-comet_pos[:,1].min(),
+    #                     comet_pos[:,2].max()-comet_pos[:,2].min()]).max() / 2.0
+    # mid_x = (comet_pos[:,0].max()+comet_pos[:,0].min()) * 0.5
+    # mid_y = (comet_pos[:,1].max()+comet_pos[:,1].min()) * 0.5
+    # mid_z = (comet_pos[:,2].max()+comet_pos[:,2].min()) * 0.5
+    # ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    # ax.set_ylim(mid_y - max_range, mid_y + max_range)
+    # ax.set_zlim(mid_z - max_range, mid_z + max_range)
+    # plt.savefig(f"{directory_name}{addition}/3D_plot.pdf", dpi=300)
+    # # plt.show()
+    # plt.close()
 
     # ----------------------------------------------------------------------
     # Plotting of the residuals
@@ -898,7 +775,7 @@ for body in all_results:
     body = name
     corr_matrix = covariance_output.correlations
 
-    covar_names = ["x", 'y', 'z', 'vx', 'vy', 'vz'] #, 'A1', 'A2', 'A3']
+    covar_names = ["x", 'y', 'z', 'vx', 'vy', 'vz', 'A1', 'A2', 'A3']
 
     fig, ax = plt.subplots(figsize=(9, 7))
     im = ax.imshow(corr_matrix, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
@@ -923,40 +800,40 @@ for body in all_results:
     plt.close()
 
 
-    # ----------------------------------------------------------------------
-    # correlation plot final
-    initial_covariance = covariance_output.covariance    
-    final_covariance = estimation_analysis.propagate_covariance(initial_covariance,estimator.state_transition_interface,[SSE_end])
+    # # ----------------------------------------------------------------------
+    # # correlation plot final
+    # initial_covariance = covariance_output.covariance    
+    # final_covariance = estimation_analysis.propagate_covariance(initial_covariance,estimator.state_transition_interface,[SSE_end])
 
-    # Extract the covariance matrix
-    cov_matrix = list(final_covariance.values())[0]
+    # # Extract the covariance matrix
+    # cov_matrix = list(final_covariance.values())[0]
 
-    # Compute correlation matrix
-    D = np.sqrt(np.diag(cov_matrix))
-    corr_matrix = cov_matrix / np.outer(D, D)
+    # # Compute correlation matrix
+    # D = np.sqrt(np.diag(cov_matrix))
+    # corr_matrix = cov_matrix / np.outer(D, D)
 
-    covar_names = ["x", "y", "z", "vx", "vy", "vz"] #,"A1","A2","A3"]
+    # covar_names = ["x", "y", "z", "vx", "vy", "vz"] #,"A1","A2","A3"]
 
-    fig, ax = plt.subplots(figsize=(9, 7))
-    im = ax.imshow(corr_matrix, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
+    # fig, ax = plt.subplots(figsize=(9, 7))
+    # im = ax.imshow(corr_matrix, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
 
-    ax.set_xticks(np.arange(len(covar_names)), labels=covar_names, rotation=45, ha="right")
-    ax.set_yticks(np.arange(len(covar_names)), labels=covar_names)
+    # ax.set_xticks(np.arange(len(covar_names)), labels=covar_names, rotation=45, ha="right")
+    # ax.set_yticks(np.arange(len(covar_names)), labels=covar_names)
 
-    for i in range(len(covar_names)):
-        for j in range(len(covar_names)):
-            ax.text(j, i, f"{corr_matrix[i, j]:.2f}",
-                    ha="center", va="center", color="w", fontsize=8)
+    # for i in range(len(covar_names)):
+    #     for j in range(len(covar_names)):
+    #         ax.text(j, i, f"{corr_matrix[i, j]:.2f}",
+    #                 ha="center", va="center", color="w", fontsize=8)
 
-    cb = plt.colorbar(im)
-    cb.set_label("Correlation coefficient")
+    # cb = plt.colorbar(im)
+    # cb.set_label("Correlation coefficient")
 
-    ax.set_xlabel("Estimated Parameter")
-    ax.set_ylabel("Estimated Parameter")
-    fig.suptitle("Correlation matrix for estimated parameters")
+    # ax.set_xlabel("Estimated Parameter")
+    # ax.set_ylabel("Estimated Parameter")
+    # fig.suptitle("Correlation matrix for estimated parameters")
 
-    fig.tight_layout()
-    plt.close()
+    # fig.tight_layout()
+    # plt.close()
 
     # ----------------------------------------------------------------------
     # Formal Errors and Covariance Matrix
@@ -966,24 +843,20 @@ for body in all_results:
         simulated_observations)
 
     # # Set methodological options
-    covariance_input.define_covariance_settings(
-        reintegrate_variational_equations=True)
-    covariance_output = estimator.compute_covariance(covariance_input)
-    initial_covariance = covariance_output.covariance  # Covariance matrix
-    print(f'Initial_covariance:\n\n{initial_covariance}\n')
+    # print(f'Initial_covariance:\n\n{initial_covariance}\n')
 
     state_transition_interface = estimator.state_transition_interface
     output_times = observation_times
 
     diagonal_covariance = np.diag(formal_errors**2)
-    print(f'Formal Error Matrix:\n\n{diagonal_covariance}\n')
+    # print(f'Formal Error Matrix:\n\n{diagonal_covariance}\n')
 
     sigma = 3  # Confidence level
     original_eigenvalues, original_eigenvectors = np.linalg.eig(diagonal_covariance)
     original_diagonal_eigenvalues, original_diagonal_eigenvectors = np.linalg.eig(diagonal_covariance)
-    print(f'Estimated state and parameters:\n\n {parameters_to_estimate.parameter_vector}\n')
-    print(f'Eigenvalues of Covariance Matrix:\n\n {original_eigenvalues}\n')
-    print(f'Eigenvalues of Formal Errors Matrix:\n\n {original_diagonal_eigenvalues}\n')
+    # print(f'Estimated state and parameters:\n\n {parameters_to_estimate.parameter_vector}\n')
+    # print(f'Eigenvalues of Covariance Matrix:\n\n {original_eigenvalues}\n')
+    # print(f'Eigenvalues of Formal Errors Matrix:\n\n {original_diagonal_eigenvalues}\n')
 
     # Sort eigenvalues and eigenvectors
     sorted_indices = np.argsort(original_eigenvalues)[::-1]
@@ -996,10 +869,10 @@ for body in all_results:
     diagonal_eigenvectors = original_diagonal_eigenvectors[:, diagonal_sorted_indices]
 
     # Output results
-    print(f"Sorted Eigenvalues (variances along principal axes):\n\n{eigenvalues}\n")
-    print(f"Sorted Formal Error Matrix Eigenvalues (variances along principal axes):\n\n{diagonal_eigenvalues}\n")
-    print(f"Sorted Eigenvectors (directions of principal axes):\n\n{eigenvectors}\n")
-    print(f"Sorted Formal Error Matrix Eigenvectors (directions of principal axes):\n\n{diagonal_eigenvectors}\n")
+    # print(f"Sorted Eigenvalues (variances along principal axes):\n\n{eigenvalues}\n")
+    # print(f"Sorted Formal Error Matrix Eigenvalues (variances along principal axes):\n\n{diagonal_eigenvalues}\n")
+    # print(f"Sorted Eigenvectors (directions of principal axes):\n\n{eigenvectors}\n")
+    # print(f"Sorted Formal Error Matrix Eigenvectors (directions of principal axes):\n\n{diagonal_eigenvectors}\n")
 
     COV_sub = initial_covariance[np.ix_(np.sort(sorted_indices)[:3], np.sort(sorted_indices)[:3])]  #Covariance restriction to first 3 (spatial) eigenvectors
     diagonal_COV_sub = diagonal_covariance[np.ix_(np.sort(diagonal_sorted_indices)[:3], np.sort(diagonal_sorted_indices)[:3])]  #Covariance restriction to first 3 (spatial) eigenvectors
@@ -1123,6 +996,7 @@ for body in all_results:
 
         # from estimation
         state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(time)
+        print(np.linalg.norm(state_est[:3])/constants.ASTRONOMICAL_UNIT)
         estimation_states.append(state_est)
 
         # Error in kilometers
@@ -1144,6 +1018,47 @@ for body in all_results:
     fig.suptitle(f"Error vs SPICE over time for {name}")
     fig.set_tight_layout(True)
     plt.savefig(f"{directory_name}{addition}/Error_to_spice.pdf", dpi=300)
+    plt.close()
+
+# Plot difference to spice
+    fig, ax = plt.subplots(1, 1, figsize=(9, 5))
+
+    spice_states = []
+    estimation_states = []
+
+    # retrieve the states for a list of times.
+    times = np.linspace(SSE_start, SSE_end, 1000)
+    for time in times:
+        # from spice
+        state_spice = spice.get_body_cartesian_state_at_epoch(
+            str(spkid), central_bodies[0], global_frame_orientation, "NONE", time
+        )
+        spice_states.append(state_spice)
+
+        # from estimation
+        state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(time)
+        estimation_states.append(state_est)
+
+        # Error in kilometers
+        error = (np.array(spice_states) - np.array(estimation_states)) / 1000
+    x_axis = np.linalg.norm(np.array(spice_states),axis=1)/constants.ASTRONOMICAL_UNIT
+    # plot
+    ax.plot(x_axis, error[:, 0], label="x")
+    ax.plot(x_axis, error[:, 1], label="y")
+    ax.plot(x_axis, error[:, 2], label="z")
+
+    ax.grid()
+    ax.legend(ncol=1)
+    ax.invert_xaxis()
+
+    plt.tight_layout()
+
+    ax.set_ylabel("Cartesian Error [km]")
+    ax.set_xlabel("Heliocentric distance [AU]")
+
+    fig.suptitle(f"Error vs SPICE over distance for {name}, {len(ra_deg)} observations")
+    fig.set_tight_layout(True)
+    plt.savefig(f"{directory_name}{addition}/Error_to_spice_distance.pdf", dpi=300)
     plt.close()
 
     # ----------------------------------------------------------------------
@@ -1309,6 +1224,5 @@ for body in all_results:
 
                 states = dynamics_simulator_montecarlo.propagation_results.state_history
                 
-                print(states)
 
     

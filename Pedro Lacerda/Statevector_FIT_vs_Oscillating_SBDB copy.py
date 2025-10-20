@@ -156,7 +156,7 @@ for comet in comets:
         f"Integrating \n"
         f"integrator: {Integrator}\n"
         )
-    
+   
     start = timer.perf_counter()
     for j, time in enumerate(times):
         sim.integrate(time)
