@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import matplotlib.cm as cm
 import numpy as np
 import random
@@ -88,6 +90,7 @@ class observations_Plotter:
         plt.tight_layout()
         plt.savefig(f"{directory_name}{addition}/Obs_RADEC_Aitoff.pdf", dpi=300)
         plt.close()
+
 class estimation_plotter:
     def __init__(self,name,pod_it,pod_output,simulated_observations,covariance_output,parameters_to_estimate,state_transition):
         self.name = name
@@ -328,5 +331,259 @@ class estimation_plotter:
         plt.close()
 
 class statistics_plotter:
-    def __init__(self):
-        x=1
+    def __init__(self,data,info_dict_synobs):
+        self.data = data
+        self.info = info_dict_synobs
+
+        self.Family = {
+            "Truth_norm":{},
+
+            "Fitted_norm":{},
+
+            "Clone_norm": {},
+            "Clone_Divergence": {},
+            "Clone_Divergence_Norm": {},
+            "Clone_Divergence_Norm_peri": {},                  
+
+            "Clone_vel_norm":{},
+            "Clone_divergence_vel":{},
+            "Clone_divergence_vel_norm":{},
+            "Clone_Divergence_Nor_vel_peri": {},                  
+
+            "Pos_div_1AU": {},
+            "Vel_div_1AU": {},
+            }
+
+        def compute_family(family_dict, data):
+            monte_sample = data['Montecarlo_trajectory']
+            Truth_trajectory = data['Truth_Reference_trajectory']
+            Truth_pos_norm = np.linalg.norm(Truth_trajectory[:, 0:3], axis=1)
+            family_dict["Truth_norm"] = Truth_pos_norm
+
+            for sim, sim_data in monte_sample.items():
+                for key, traj in sim_data.items():
+                    pos = traj[:, 0:3]
+                    vel = traj[:, 3:]
+
+                    family_dict["Clone_norm"].setdefault(sim, {})[key] = np.linalg.norm(pos, axis=1)
+                    family_dict["Clone_vel_norm"].setdefault(sim, {})[key] = np.linalg.norm(vel, axis=1)
+
+                    family_dict["Clone_Divergence"].setdefault(sim, {})[key] = pos - Truth_trajectory[:, 0:3]
+                    family_dict["Clone_Divergence_Norm"].setdefault(sim, {})[key] = np.linalg.norm(
+                        family_dict["Clone_Divergence"][sim][key], axis=1
+                    )
+
+                    family_dict["Clone_divergence_vel"].setdefault(sim, {})[key] = vel - Truth_trajectory[:, 3:]
+                    family_dict["Clone_divergence_vel_norm"].setdefault(sim, {})[key] = np.linalg.norm(
+                        family_dict["Clone_divergence_vel"][sim][key], axis=1
+                    )
+
+                    idx_peri = np.argmin(Truth_pos_norm)
+
+                    family_dict["Clone_Divergence_Norm_peri"].setdefault(sim, {})[key] = \
+                        family_dict["Clone_Divergence_Norm"][sim][key][idx_peri]
+                    family_dict["Clone_Divergence_Nor_vel_peri"].setdefault(sim, {})[key] = \
+                        family_dict["Clone_divergence_vel_norm"][sim][key][idx_peri]
+
+
+        compute_family(self.Family, self.data)
+
+        self.general_statistics = {
+            "Clone_Divergence_Norm_peri": {},  
+            "Clone_Divergence_Vel_Norm_peri": {},  
+            "Clone_Divergence_Norm_AU": {},  
+            "Clone_Divergence_Vel_Norm_AU": {},  
+        }
+
+        self.obs_scatter = {
+            "N_obs": {},
+            "Date": {},
+            "Helio": {},
+        }
+
+        # def compute_obs_timeline(self):
+        #     perihelion_str = self.data[]
+        #     last_obs_str = self.info["Sim_time"].get("last obs")
+
+        #     dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3) 
+
+        # compute_obs_timeline()
+
+    def plot_3D(self):
+        def D_traject(cartesian, ax=None, label=None, color=None, linestyle="-", alpha=1.0, lw=1.2):
+            if ax is None:
+                fig = plt.figure(figsize=(10, 8))
+                ax = fig.add_subplot(111, projection='3d')
+                ax.set_aspect('equal', adjustable='box')
+
+            ax.plot(cartesian[:, 0]/AU, cartesian[:, 1]/AU, cartesian[:, 2]/AU,
+                    label=label, color=color, linestyle=linestyle, alpha=alpha, lw=lw)
+            ax.scatter(cartesian[0, 0]/AU, cartesian[0, 1]/AU, cartesian[0, 2]/AU, marker="o", s=10, color=color)
+            ax.scatter(cartesian[-1, 0]/AU, cartesian[-1, 1]/AU, cartesian[-1, 2]/AU, marker="x", s=10, color=color)
+            return ax
+
+        def plot_ensemble(data,montecarlo, fit, info, n_clones=20):   
+            perturbing_bodies = data["environment"][1:]
+
+            planets = ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"]
+            moons = [b for b in perturbing_bodies if b not in planets]
+
+            def draw_sun(ax):
+                radius_sun = 696340e3 /AU
+                _u, _v = np.mgrid[0:2*np.pi:50j, 0:np.pi:40j]
+                _x = radius_sun * np.cos(_u) * np.sin(_v)
+                _y = radius_sun * np.sin(_u) * np.sin(_v)
+                _z = radius_sun * np.cos(_v)
+                ax.plot_wireframe(_x, _y, _z, color="orange", alpha=0.5, lw=0.5, zorder=0)
+
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection="3d")
+            ax.set_aspect("equal", adjustable="box")
+
+            clone_keys = list(montecarlo.keys())
+            selected_keys = random.sample(clone_keys, min(n_clones, len(clone_keys)))
+            for key in selected_keys:
+                cartesian = montecarlo[key]
+                ax.plot(cartesian[:, 0]/AU, cartesian[:, 1]/AU, cartesian[:, 2]/AU,
+                        alpha=0.35, color="gray", lw=0.8)
+
+            D_traject(np.array(data["Truth_Reference_trajectory"]), ax=ax,
+                    label='JPL SBDB fitted orbit', color="black", linestyle="-", alpha=0.9, lw=1.8)
+            D_traject(np.array(fit), ax=ax,
+                    label='TUDAT fitted orbit', color="red", linestyle=":", alpha=0.9, lw=1.8)
+
+            colors = plt.cm.tab20(np.linspace(0, 1, len(perturbing_bodies)))
+            planet_handles, moon_handles = [], []
+
+            for i, body in enumerate(perturbing_bodies):
+                color = colors[i]
+                linestyle = "-" if body in planets else ":"
+                D_traject(np.array(data["N_body_trajectories"][body]), ax=ax,
+                        color=color, linestyle=linestyle, alpha=0.9, lw=1.2)
+                handle = Line2D([0], [0], color=color, lw=1.2, linestyle=linestyle)
+                if body in planets:
+                    planet_handles.append((handle, body))
+                else:
+                    moon_handles.append((handle, body))
+
+            draw_sun(ax)
+
+            max_value = max(np.max(np.abs(np.array(traj))) for traj in data["Truth_Reference_trajectory"])
+            ax.set_xlim([-max_value/AU, max_value/AU])
+            ax.set_ylim([-max_value/AU, max_value/AU])
+            ax.set_zlim([-max_value/AU, max_value/AU])
+            ax.set_xlabel("x [AU]")
+            ax.set_ylabel("y [AU]")
+            ax.set_zlabel("z [AU]")
+
+            comet_legend = [
+                Line2D([0], [0], color='black', lw=1.2, label='Nasa JPL SBDB Fit'),
+                Line2D([0], [0], color='red', lw=1.2, linestyle=":", label='Synthetic Observations Fit'),
+                Line2D([0], [0], color='gray', lw=1.2, linestyle=":", label='Monte carlo samples')
+
+            ]
+            planet_legend = [h for h, lbl in planet_handles]
+            moon_legend = [h for h, lbl in moon_handles]
+
+            leg1 = ax.legend(handles=comet_legend, loc='upper left', title="Comet Orbits", fontsize=8)
+            leg2 = ax.legend(planet_legend, [lbl for _, lbl in planet_handles],
+                            loc='upper right', title="Planets", fontsize=8)
+            leg3 = ax.legend(moon_legend, [lbl for _, lbl in moon_handles],
+                            loc='lower left', title="Moons", fontsize=7, ncol=2)
+
+            ax.add_artist(leg1)
+            ax.add_artist(leg2)
+            ax.add_artist(leg3)
+
+            plt.title(f"{n_clones} Monte Carlo samples of comet {info['Name']} — {info['Observations']} observations")
+            # plt.savefig(f"{self.base_path}/{self.comet}_3D_trajectory.pdf", dpi=300)
+            plt.show()
+
+        keys = list(self.data["Estimated_Reference_trajectory"].keys())
+        best_key = keys[0]
+        worst_key = keys[-1]
+
+        best_fit = self.data["Estimated_Reference_trajectory"][best_key]
+        worst_fit = self.data["Estimated_Reference_trajectory"][worst_key]
+
+        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][worst_key],worst_fit,self.info, n_clones=self.data['Sim_info']["Orbit_samples"])
+        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][best_key],best_fit,self.info, n_clones=self.data['Sim_info']["Orbit_samples"])
+
+    # def boxplot(self):
+    #     extra_time = 15
+
+    #     # ------------------------------------------------------------------------------------------------------
+    #     # Position 
+    #     # ------------------------------------------------------------------------------------------------------
+    #     divergence = general_statistics["Clone_Divergence_Norm_peri"][comet]
+    #     dt = sorted(divergence.keys(), reverse=True)
+
+    #     dt = np.array(dt, dtype=float)
+
+    #     data = [np.array(divergence[n]) / 1e3 for n in dt]
+
+    #     plt.figure(figsize=(15, 8))
+
+    #     box = plt.boxplot(
+    #         data,
+    #         positions=dt,          
+    #         widths=5, 
+    #         patch_artist=True,
+    #         manage_ticks=False
+    #     )
+
+    #     for patch in box["boxes"]:
+    #         patch.set_facecolor("tab:blue")
+    #         patch.set_alpha(0.6)
+
+    #     time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
+
+    #     plt.xticks(time,rotation=70)
+    #     plt.gca().invert_xaxis()
+    #     plt.yscale("log")
+    #     plt.ylabel("Clone Position Divergence Norm at perihelion [km]")
+    #     plt.xlabel(r"$\Delta{Days}$")
+    #     plt.title(
+    #         f"Clone Position Divergence vs. Days to Perihelion {comet}\n"
+    #         f"{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
+    #     )
+    #     plt.grid(axis="y", linestyle="--", alpha=0.7)
+    #     plt.tight_layout()
+    #     plt.savefig(f"{base_path}/{comet}_boxplot_POS_Peri.pdf", dpi=300)
+    #     # plt.show()
+
+    #     # ------------------------------------------------------------------------------------------------------
+    #     # Velocity 
+    #     # ------------------------------------------------------------------------------------------------------
+    #     divergence = general_statistics["Clone_Divergence_Vel_Norm_peri"][comet]
+    #     dt = sorted(divergence.keys(), reverse=True)
+
+    #     data = [np.array(divergence[n]) for n in dt]
+    #     positions = np.arange(len(dt)) * 2
+
+    #     plt.figure(figsize=(15, 8))
+    #     box = plt.boxplot(
+    #         data,
+    #         positions=dt,          
+    #         widths=5, 
+    #         patch_artist=True,
+    #         manage_ticks=False
+    #     )
+    #     time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
+
+    #     for patch in box["boxes"]:
+    #         patch.set_facecolor("tab:blue")
+    #         patch.set_alpha(0.6)
+
+    #     plt.xticks(time,rotation=70)
+    #     plt.gca().invert_xaxis()
+
+    #     plt.yscale("log")
+    #     plt.ylabel("Clone Velocity Divergence Norm at perihelion [m/s]")
+    #     plt.xlabel(r"$\Delta{Days}$")
+    #     plt.title(f"Clone Velocity Divergence vs. Days to Perihelion {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
+    #     plt.grid(axis="y", linestyle="--", alpha=0.7)
+    #     plt.tight_layout()
+    #     plt.savefig(f'{base_path}/{comet}_boxplot_VEL_Peri.pdf',dpi=300)
+    #     # plt.show()
+

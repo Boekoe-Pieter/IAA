@@ -129,7 +129,6 @@ for comet, data in files_dict.items():
         # ---------------------------------
         # add mean orbit
         SBDB = Util.SBDB(body,end_time_MJD)
-        # def add_SBDB(ref_sim,states):
         e,a,q,i,om,w,Tp_mjd = SBDB
         sim.add(
             primary=sim.particles[0],
@@ -149,7 +148,6 @@ for comet, data in files_dict.items():
         # ---------------------------------
         # add fitted reference
         initial_conidtions = Util.initial_conditions(total_data,body)
-        # def add_fit_ref(ref_sim,states):
         e,a,q,i,om,w,Tp_mjd = initial_conidtions
         sim.add(
             primary=sim.particles[0],
@@ -163,7 +161,6 @@ for comet, data in files_dict.items():
             hash='FIT'
         )
         
-        # add_fit_ref(sim,initial_conidtions)
         data_to_write["Nominal_trajectory_fit"] = np.zeros((len(times), 6))
 
         # ---------------------------------

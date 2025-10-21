@@ -1,6 +1,5 @@
 # import python libraries
 import numpy as np
-import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from tudatpy.data.sbdb import SBDBquery
 from tudatpy.astro import time_representation
@@ -10,7 +9,6 @@ import re
 # simulation libraries
 import rebound
 import reboundx
-from astropy.time import Time, TimeDelta
 from scipy import constants as const
 
 def create_sim(primary,start_time,integrator,timestep):
@@ -39,10 +37,6 @@ def add_Rel(sim):
     rebx.add_force(gr)
     c_au_per_day = const.c * const.day / const.au
     gr.params["c"] = c_au_per_day
-
-import re
-import numpy as np
-import pandas as pd
 
 def extract_traditional_covariance(filepath):
     with open(filepath, "r") as f:
