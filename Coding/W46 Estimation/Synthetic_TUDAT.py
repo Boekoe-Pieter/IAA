@@ -29,7 +29,7 @@ np.set_printoptions(linewidth=160)
 # Define saving directories
 # ----------------------------------------------------------------------
 sys.path.append('/Users/pieter/IAA/Coding')
-Spice_files = '/Users/pieter/IAA/Coding/Spice_files/'
+Spice_files_path = '/Users/pieter/IAA/Coding/Spice_files/'
 rel_dir = os.path.dirname(os.path.abspath(__file__))
 
 # ----------------------------------------------------------------------
@@ -150,7 +150,7 @@ for body in all_results:
             #
             # If a suggested SPK file basename was provided, use it:
             if "spk_file_id" in Horizons:
-                spk_filename = Spice_files + Horizons["spk_file_id"] + ".bsp"
+                spk_filename = Spice_files_path + Horizons["spk_file_id"] + ".bsp"
             try:
                 f = open(spk_filename, "wb")
             except OSError as err:
@@ -163,7 +163,7 @@ for body in all_results:
     
     spice.clear_kernels()
     spice.load_standard_kernels()
-    spice.load_kernel("Coding/Spice_files/gm_Horizons.pck")
+    # spice.load_kernel("Coding/Spice_files/gm_Horizons.pck")
     spice.load_kernel("Coding/Spice_files/de441_part-1.bsp")
     spice.load_kernel("Coding/Spice_files/de441_part-2.bsp")
     spice.load_kernel("Coding/Spice_files/sb441-n16.bsp")
@@ -231,7 +231,7 @@ for body in all_results:
 
     bodies = environment_setup.create_system_of_bodies(body_settings)
     central_bodies = [global_frame_origin]
-    
+
     # ----------------------------------------------------------------------
     # Define Observatory
     # ----------------------------------------------------------------------
