@@ -354,7 +354,27 @@ class statistics_plotter:
             "Vel_div_1AU": {},
             }
 
+        self.general_statistics = {
+            "Clone_Divergence_Norm_peri": {},  
+            "Clone_Divergence_Vel_Norm_peri": {},  
+        }
+
+        self.obs_scatter = {
+            "N_obs": {},
+            "Date": {},
+            "Helio": {},
+        }
+
+    
         def compute_family(family_dict, data):
+            comet = self.info["Name"]
+
+            #populate the dictionary of general statistics
+            if comet not in self.general_statistics["Clone_Divergence_Norm_peri"]:
+                self.general_statistics["Clone_Divergence_Norm_peri"][comet] = {}
+            if comet not in self.general_statistics["Clone_Divergence_Vel_Norm_peri"]:
+                self.general_statistics["Clone_Divergence_Vel_Norm_peri"][comet] = {}
+
             monte_sample = data['Montecarlo_trajectory']
             Truth_trajectory = data['Truth_Reference_trajectory']
             Truth_pos_norm = np.linalg.norm(Truth_trajectory[:, 0:3], axis=1)
@@ -365,6 +385,8 @@ class statistics_plotter:
                     pos = traj[:, 0:3]
                     vel = traj[:, 3:]
 
+                    # ----------------------------------------------------------------------
+                    # Compute divergence
                     family_dict["Clone_norm"].setdefault(sim, {})[key] = np.linalg.norm(pos, axis=1)
                     family_dict["Clone_vel_norm"].setdefault(sim, {})[key] = np.linalg.norm(vel, axis=1)
 
@@ -378,36 +400,33 @@ class statistics_plotter:
                         family_dict["Clone_divergence_vel"][sim][key], axis=1
                     )
 
+                    # ----------------------------------------------------------------------
+                    # Find perihelion divergence
                     idx_peri = np.argmin(Truth_pos_norm)
 
                     family_dict["Clone_Divergence_Norm_peri"].setdefault(sim, {})[key] = \
                         family_dict["Clone_Divergence_Norm"][sim][key][idx_peri]
                     family_dict["Clone_Divergence_Nor_vel_peri"].setdefault(sim, {})[key] = \
                         family_dict["Clone_divergence_vel_norm"][sim][key][idx_peri]
+                    
+                    # ----------------------------------------------------------------------
+                    # timeline
+                    perihelion = self.data["Truth_Reference_trajectory_times"][-1]
+                    last_obs = self.data["observation_times"][sim][-1]
 
+                    N_obs = self.data["Sim_info"][sim].get("Orbit_samples")
+                    dt_days_peri = (perihelion - last_obs) / constants.JULIAN_DAY
 
+                    # ----------------------------------------------------------------------
+                    # Saving to dictionary             
+                    self.general_statistics["Clone_Divergence_Norm_peri"][comet].setdefault(dt_days_peri[0], []).append(
+                        family_dict["Clone_Divergence_Norm_peri"][sim][key]
+                    )
+
+                    self.general_statistics["Clone_Divergence_Vel_Norm_peri"][comet].setdefault(dt_days_peri[0], []).append(
+                        family_dict["Clone_Divergence_Nor_vel_peri"][sim][key])
+        
         compute_family(self.Family, self.data)
-
-        self.general_statistics = {
-            "Clone_Divergence_Norm_peri": {},  
-            "Clone_Divergence_Vel_Norm_peri": {},  
-            "Clone_Divergence_Norm_AU": {},  
-            "Clone_Divergence_Vel_Norm_AU": {},  
-        }
-
-        self.obs_scatter = {
-            "N_obs": {},
-            "Date": {},
-            "Helio": {},
-        }
-
-        # def compute_obs_timeline(self):
-        #     perihelion_str = self.data[]
-        #     last_obs_str = self.info["Sim_time"].get("last obs")
-
-        #     dt_days_peri = round((perihelion - last_obs).total_seconds() / 86400, 3) 
-
-        # compute_obs_timeline()
 
     def plot_3D(self):
         def D_traject(cartesian, ax=None, label=None, color=None, linestyle="-", alpha=1.0, lw=1.2):
@@ -506,84 +525,66 @@ class statistics_plotter:
         best_fit = self.data["Estimated_Reference_trajectory"][best_key]
         worst_fit = self.data["Estimated_Reference_trajectory"][worst_key]
 
-        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][worst_key],worst_fit,self.info, n_clones=self.data['Sim_info']["Orbit_samples"])
-        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][best_key],best_fit,self.info, n_clones=self.data['Sim_info']["Orbit_samples"])
+        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][worst_key],worst_fit,self.info, n_clones=self.info['Orbit_clones'])
+        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][best_key],best_fit,self.info, n_clones=self.info['Orbit_clones'])
 
-    # def boxplot(self):
-    #     extra_time = 15
+    def boxplot(self, extra_time=15):
+        comet = self.info["Name"]
+        info = self.info
+        stats = self.general_statistics
 
-    #     # ------------------------------------------------------------------------------------------------------
-    #     # Position 
-    #     # ------------------------------------------------------------------------------------------------------
-    #     divergence = general_statistics["Clone_Divergence_Norm_peri"][comet]
-    #     dt = sorted(divergence.keys(), reverse=True)
+        def make_boxplot(divergence_dict, ylabel, title_suffix, scale=1.0, save_name=None):
+            dt = sorted(divergence_dict.keys(), reverse=True)
+            data = [np.array(divergence_dict[n]) / scale for n in dt]
 
-    #     dt = np.array(dt, dtype=float)
+            plt.figure(figsize=(15, 8))
+            box = plt.boxplot(
+                data,
+                positions=dt,
+                widths=5,
+                patch_artist=True,
+                manage_ticks=False
+            )
 
-    #     data = [np.array(divergence[n]) / 1e3 for n in dt]
+            for patch in box["boxes"]:
+                patch.set_facecolor("tab:blue")
+                patch.set_alpha(0.6)
 
-    #     plt.figure(figsize=(15, 8))
+            time_ticks = np.arange(max(dt), min(dt) - extra_time, -extra_time)
+            plt.xticks(time_ticks, rotation=70)
+            plt.gca().invert_xaxis()
+            plt.yscale("log")
+            plt.ylabel(ylabel)
+            plt.xlabel(r"$\Delta{Days}$")
+            plt.title(
+                f"{title_suffix} {comet}\n"
+                # f"{data['Orbit_samples']} clones, Integrator: {info['Integrator']}, timestep: {info['Global Timestep']} sec"
 
-    #     box = plt.boxplot(
-    #         data,
-    #         positions=dt,          
-    #         widths=5, 
-    #         patch_artist=True,
-    #         manage_ticks=False
-    #     )
+            )
+            plt.grid(axis="y", linestyle="--", alpha=0.7)
+            plt.tight_layout()
 
-    #     for patch in box["boxes"]:
-    #         patch.set_facecolor("tab:blue")
-    #         patch.set_alpha(0.6)
+            if save_name:
+                plt.savefig(f"{save_name}.pdf", dpi=300)
+            plt.show()
 
-    #     time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
+        # ------------------------------------------------------
+        # Position boxplot
+        make_boxplot(
+            stats["Clone_Divergence_Norm_peri"][comet],
+            ylabel="Clone Position Divergence Norm at perihelion [km]",
+            title_suffix="Clone Position Divergence vs. Days to Perihelion",
+            scale=1e3,
+            save_name=None  #f"{base_path}/{comet}_boxplot_POS_Peri"
+        )
 
-    #     plt.xticks(time,rotation=70)
-    #     plt.gca().invert_xaxis()
-    #     plt.yscale("log")
-    #     plt.ylabel("Clone Position Divergence Norm at perihelion [km]")
-    #     plt.xlabel(r"$\Delta{Days}$")
-    #     plt.title(
-    #         f"Clone Position Divergence vs. Days to Perihelion {comet}\n"
-    #         f"{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
-    #     )
-    #     plt.grid(axis="y", linestyle="--", alpha=0.7)
-    #     plt.tight_layout()
-    #     plt.savefig(f"{base_path}/{comet}_boxplot_POS_Peri.pdf", dpi=300)
-    #     # plt.show()
-
-    #     # ------------------------------------------------------------------------------------------------------
-    #     # Velocity 
-    #     # ------------------------------------------------------------------------------------------------------
-    #     divergence = general_statistics["Clone_Divergence_Vel_Norm_peri"][comet]
-    #     dt = sorted(divergence.keys(), reverse=True)
-
-    #     data = [np.array(divergence[n]) for n in dt]
-    #     positions = np.arange(len(dt)) * 2
-
-    #     plt.figure(figsize=(15, 8))
-    #     box = plt.boxplot(
-    #         data,
-    #         positions=dt,          
-    #         widths=5, 
-    #         patch_artist=True,
-    #         manage_ticks=False
-    #     )
-    #     time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
-
-    #     for patch in box["boxes"]:
-    #         patch.set_facecolor("tab:blue")
-    #         patch.set_alpha(0.6)
-
-    #     plt.xticks(time,rotation=70)
-    #     plt.gca().invert_xaxis()
-
-    #     plt.yscale("log")
-    #     plt.ylabel("Clone Velocity Divergence Norm at perihelion [m/s]")
-    #     plt.xlabel(r"$\Delta{Days}$")
-    #     plt.title(f"Clone Velocity Divergence vs. Days to Perihelion {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
-    #     plt.grid(axis="y", linestyle="--", alpha=0.7)
-    #     plt.tight_layout()
-    #     plt.savefig(f'{base_path}/{comet}_boxplot_VEL_Peri.pdf',dpi=300)
-    #     # plt.show()
+        # ------------------------------------------------------
+        # Velocity boxplot
+        make_boxplot(
+            stats["Clone_Divergence_Vel_Norm_peri"][comet],
+            ylabel="Clone Velocity Divergence Norm at perihelion [m/s]",
+            title_suffix="Clone Velocity Divergence vs. Days to Perihelion",
+            scale=1.0,
+            save_name=None  #f"{base_path}/{comet}_boxplot_VEL_Peri"
+        )
 

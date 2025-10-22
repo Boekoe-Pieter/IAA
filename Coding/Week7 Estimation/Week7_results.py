@@ -51,7 +51,7 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # ----------------------------------------------------------------------
 
 # samples
-Orbit_samples = 10
+Orbit_samples = 100
 Observation_step_size = 330
 np.random.seed(42)
 
@@ -88,9 +88,6 @@ bodies_to_create = [
     "Mars",
         "Phobos",
         "Deimos",
-
-    "Ceres",
-    "Vesta",
     
     "Jupiter",
         "Io",
@@ -116,7 +113,9 @@ bodies_to_create = [
 
     "Neptune",
         "Triton",
-    
+
+    "Ceres",
+    "Vesta", 
     "Pluto",
 ]
 
@@ -204,16 +203,16 @@ for body in all_results:
     JD_start = time_representation.seconds_since_epoch_to_julian_day(SSE_start_buffer)
     JD_end = time_representation.seconds_since_epoch_to_julian_day(SSE_end_buffer)
 
-    J2000_start = "JD" + str(JD_start)
-    J2000_end = "JD" + str(JD_end)
+    JD_start = "JD" + str(JD_start)
+    JD_end = "JD" + str(JD_end)
 
     # ----------------------------------------------------------------------
     # Create SPK file via JPL Horizons & load comet specific kernel
     # ----------------------------------------------------------------------
     Helper_file.Horizons_SPK(Spice_files_path, 
                              spkid, 
-                             J2000_start, 
-                             J2000_end)
+                             JD_start, 
+                             JD_end)
     
     spice.load_kernel(f"Coding/Spice_files/{spkid}.bsp")
 
@@ -277,7 +276,6 @@ for body in all_results:
         end = start + 3
         data_to_write["N_body_trajectories"][disturber] = Trajectory_info[:, start:end]
 
-
     comet_states = np.vstack(list(Reference_orbit_results.values()))
     comet_pos = comet_states[:, :3]/constants.ASTRONOMICAL_UNIT
     
@@ -290,10 +288,10 @@ for body in all_results:
         "NONE",
         SSE_tp,
     )
+
     print(f"Spice final state: {np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT}")
     print(f"difference {(np.linalg.norm(comet_pos[-1])-np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT)*constants.ASTRONOMICAL_UNIT/1000}")
     
-
     # ----------------------------------------------------------------------
     # Define Observatory
     # ----------------------------------------------------------------------
@@ -392,7 +390,6 @@ for body in all_results:
         data_to_write['Montecarlo_trajectory_times'].setdefault(sim, {})
         data_to_write['observation_times'].setdefault(sim, {})
 
-
         current_times = Full_observation_times[:n_obs]
         observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
             observable_models_setup.model_settings.angular_position_type,
@@ -478,6 +475,7 @@ for body in all_results:
         print("Estimated start state from list m & m/s and norm in AU")
         print(np.array(ephemeris_estimated[-1]))
         print(np.linalg.norm(np.array(ephemeris_estimated[-1])[:3])/constants.ASTRONOMICAL_UNIT)
+        
         # ----------------------------------------------------------------------
         # Covariance estimation
         # ----------------------------------------------------------------------
@@ -515,7 +513,7 @@ for body in all_results:
             'Name': name,
             'SPK-id': spkid,
 
-            "Integrator": "RK1210",
+            "Integrator": "RK12",
             "Type": "Fixed",
             "Order": "Higher",
 
@@ -524,6 +522,7 @@ for body in all_results:
             "interpolation buffer end(days)": time_buffer_end/86400,
 
             "Observations": len(current_times),
+            "Orbit_clones": Orbit_samples,
             "POD iterations": number_of_pod_iterations,
             "station noise (rad)": noise_level,
             "station noise (arcsec)": LSST,
@@ -578,35 +577,14 @@ for body in all_results:
             state_hist_sample = dynamics_simulator_sample.propagation_results.state_history
             data_to_write['Montecarlo_trajectory'][sim][i] = np.vstack(list(state_hist_sample.values()))
             data_to_write['Montecarlo_trajectory_times'][sim][i] = np.vstack(list(state_hist_sample.keys()))
-            data_to_write["observation_times"][sim][i] = current_times
-
-        data_to_write['environment'] = bodies_to_create
-
-        data_to_write["Sim_info"] = {
+            data_to_write["observation_times"][sim] = current_times
+            data_to_write["Sim_info"][sim] = {
             "Orbit_samples": Orbit_samples,
             }
+        data_to_write['environment'] = bodies_to_create
+
         sim += 1
     
     stat_plot = stat_plot(data_to_write,info_dict_synobs)
     stat_plot.plot_3D()
-                
-
-
-
-
-
-
-
-        # obs_plot = obs_plot(body, simulated_observations)
-
-        # obs_plot.RADEC_overtime(directory_name=directory_name, addition=addition)
-        # obs_plot.skyplot(directory_name=directory_name, addition=addition)
-        # obs_plot.aitoff(directory_name=directory_name, addition=addition)
-
-        # est_plot = est_plot(body, number_of_pod_iterations, pod_output,
-        #                             simulated_observations, covariance_output,
-        #                             parameters_to_estimate, estimator.state_transition_interface)
-        
-        # est_plot.residuals(directory_name=directory_name, addition=addition,simulated_observations=simulated_observations)
-        # est_plot.correlation(directory_name=directory_name, addition=addition)
-        # est_plot.formal_erros(directory_name=directory_name, addition=addition)
+    stat_plot.boxplot()
