@@ -3,12 +3,14 @@ import matplotlib.pyplot as plt
 import random
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+import matplotlib.patches as patches
 
 import pickle
 import scipy.constants as const
 import random
 from datetime import datetime
 from astropy.time import Time
+import re
 
 from tudatpy.astro import time_representation
 
@@ -50,11 +52,15 @@ valid_clone_dict = {
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
 base_path = "Pedro Lacerda/"
-comet = 'C2013US10'
+comet = 'C2008A1'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
-for sim_folder in sorted(os.listdir(comet_path)):
+def natural_key(name):
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', name)]
+
+pref_Nobs = 0
+for sim_folder in sorted(os.listdir(comet_path), key=natural_key):
     sim_path = os.path.join(comet_path, sim_folder)
     data_file = os.path.join(sim_path, f"Rebound_Simulation_data.pkl")
     info_file = os.path.join(sim_path, f"Rebound_Simulation_info.pkl")
@@ -63,7 +69,6 @@ for sim_folder in sorted(os.listdir(comet_path)):
         data = pickle.load(f)
     with open(info_file, "rb") as f:
         info = pickle.load(f)
-
 
     valid_clones = info["N_valid_clones"]
     # -------------------------------
@@ -85,7 +90,10 @@ for sim_folder in sorted(os.listdir(comet_path)):
         "Pos_div_1AU": {},
         "Vel_div_1AU": {},
     }
-    # print(data["Nominal_trajectory_times"])
+
+    if info['used_obs'] < pref_Nobs:
+        continue
+    pref_Nobs = info['used_obs']
 
     def compute_family(dict, data):
         monte_sample = data['Monte_trajectory']
@@ -104,9 +112,6 @@ for sim_folder in sorted(os.listdir(comet_path)):
             dict["Clone_divergence_vel_norm"][key] = np.linalg.norm(dict["Clone_divergence_vel"][key][:,:3], axis=1)
 
             arr = Nominal_pos_norm
-            #0.8229694542126116
-            #1.073074540971431
-            print(min(arr/const.au)-0.8229694542126116)
             idx_peri = np.argmin(arr)
 
             dict["Clone_Divergence_Norm_peri"][key] = dict["Clone_Divergence_Norm"][key][idx_peri]
@@ -132,7 +137,7 @@ for sim_folder in sorted(os.listdir(comet_path)):
 
                 dict["Pos_div_1AU"][key] = pos_div_1AU
                 dict["Vel_div_1AU"][key] = vel_div_1AU
-    
+
     # ----------------------------------------------------
     # Gathering data and storing in general_statistics
     compute_family(Family, data)
@@ -389,7 +394,7 @@ def diff_orbit_fits():
 
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     # plt.savefig(f"{base_path}/{comet}_Fit_SBDB_difference.pdf", dpi=300)
-    plt.show()
+    # plt.show()
 
 diff_orbit_fits()
 
@@ -430,7 +435,7 @@ def clone_orbits():
     plt.grid()
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.savefig(f"{base_path}/{comet}_Clone_difference.pdf", dpi=300)
-    plt.show()
+    # plt.show()
 
 clone_orbits()
 
@@ -455,12 +460,14 @@ def valid_clones_plot(valid_clone_dict):
 
     plt.tight_layout()
     plt.savefig(f"{base_path}/{comet}_Valid_observations.pdf", dpi=300)
-    plt.show()
+    # plt.show()
 
 valid_clones_plot(valid_clone_dict)
 
 # ---------------------------------------------------------------------------------------------
 extra_time = 15
+height_pos = 1000
+height_vel = 1
 
 divergence = general_statistics["Clone_Divergence_Norm_peri"][comet]
 dt = sorted(divergence.keys(), reverse=True)
@@ -469,7 +476,7 @@ dt = np.array(dt, dtype=float)
 
 data = [np.array(divergence[n]) / 1e3 for n in dt]
 
-plt.figure(figsize=(15, 8))
+fig, ax = plt.subplots(figsize=(15, 8))
 
 box = plt.boxplot(
     data,
@@ -486,6 +493,21 @@ for patch in box["boxes"]:
 time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 plt.xticks(time,rotation=70)
+width = -60 
+
+x_start = 60      
+y_start = 0
+square = patches.Rectangle(
+    (x_start, y_start),   
+    width,                 
+    height_pos,                
+    linewidth=1,
+    edgecolor='black',
+    facecolor='green',
+    alpha=0.3             
+)
+ax.add_patch(square)
+
 plt.gca().invert_xaxis()
 plt.yscale("log")
 plt.ylabel("Clone Position Divergence Norm at perihelion [km]")
@@ -506,7 +528,8 @@ dt = sorted(divergence.keys(), reverse=True)
 data = [np.array(divergence[n]) for n in dt]
 positions = np.arange(len(dt)) * 2
 
-plt.figure(figsize=(15, 8))
+fig, ax = plt.subplots(figsize=(15, 8))
+
 box = plt.boxplot(
     data,
     positions=dt,          
@@ -514,13 +537,29 @@ box = plt.boxplot(
     patch_artist=True,
     manage_ticks=False
 )
-time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
     patch.set_alpha(0.6)
 
+time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
+
 plt.xticks(time,rotation=70)
+width = -60
+
+x_start = 60      
+y_start = 0
+square = patches.Rectangle(
+    (x_start, y_start),   
+    width,                 
+    height_vel,                
+    linewidth=1,
+    edgecolor='black',
+    facecolor='green',
+    alpha=0.3             
+)
+ax.add_patch(square)
+
 plt.gca().invert_xaxis()
 
 plt.yscale("log")
@@ -539,7 +578,8 @@ dt = sorted(divergence.keys(), reverse=True)
 data = [np.array(divergence[n])/1000 for n in dt]
 positions = np.arange(len(dt)) * 2
 
-plt.figure(figsize=(15, 8))
+fig, ax = plt.subplots(figsize=(15, 8))
+
 box = plt.boxplot(
     data,
     positions=dt,          
@@ -547,13 +587,15 @@ box = plt.boxplot(
     patch_artist=True,
     manage_ticks=False
 )
-time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 for patch in box["boxes"]:
     patch.set_facecolor("tab:blue")
     patch.set_alpha(0.6)
 
+time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
+
 plt.xticks(time,rotation=70)
+
 plt.gca().invert_xaxis()
 
 plt.yscale("log")
@@ -573,7 +615,8 @@ dt = sorted(divergence.keys(), reverse=True)
 data = [np.array(divergence[n]) for n in dt]
 positions = np.arange(len(dt)) * 2
 
-plt.figure(figsize=(15, 8))
+fig, ax = plt.subplots(figsize=(15, 8))
+
 box = plt.boxplot(
     data,
     positions=dt,          
@@ -589,6 +632,8 @@ for patch in box["boxes"]:
 time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 plt.xticks(time,rotation=70)
+width = time[-1]-60 if time[-1]<0 else -60
+
 plt.gca().invert_xaxis()
 
 plt.yscale("log")
@@ -624,143 +669,3 @@ fig.autofmt_xdate()
 plt.legend()
 plt.tight_layout()
 plt.savefig(f'{base_path}/{comet}_Observation_scatter.pdf',dpi=300)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# # -------------------------------
-# # Simulation plots
-# def plot_sampled(data, info_dict, covar_names=None):
-#     Sampled_data, mean_data = data["Sampled_data"], data["Initial_condition"]
-#     body = info_dict['Body']
-
-#     if covar_names is None:
-#         covar_names = ['x','y','z','vx','vy','vz']
-
-#     orbital_labels = {
-#         "x": "x [m]",
-#         "y": "y [m]",
-#         "z": "z [m]",
-#         "vx": "vx [m/s]",
-#         "vy": "vy [m/s]",
-#         "vz": "vz [m/s]",
-#     }
-
-#     n_orb = min(6, len(covar_names))
-#     nrows = (n_orb + 2) // 3
-#     fig, axs = plt.subplots(nrows, 3, figsize=(12, 4*nrows))
-#     axs = axs.flatten()
-
-#     for i in range(n_orb):
-#         param = covar_names[i]
-#         label = orbital_labels.get(param, param)
-#         axs[i].hist(Sampled_data[:, i], bins=30, alpha=0.6, label="Samples")
-#         # axs[i].axvline(mean_data[i], color="red", linestyle="--", label="Mean" if i == 0 else "")
-#         axs[i].set_xlabel(label)
-#         axs[i].set_ylabel("Count")
-
-#     axs[0].legend()
-#     plt.tight_layout()
-#     # plt.savefig(f"{img_save_dir}/Sampled_initial.pdf", dpi=300)
-#     plt.show()
-#     # plt.close()
-
-
-
-
-
-
-
-
-
-
-
-
-# # plot_sampled(data,info)
-# # D_traject(data['Nominal_trajectory']/const.au,info)
-
-# # -------------------------------
-# # Statistical plots
-# def plot_divergence_timeline(Family, sample_dis,info_dict):
-#     body,Int,dt = info_dict["Body"], info_dict["Integrator"],info_dict["timestep"]
-
-#     Nf = (Family["Nominal_norm"][0] - Family["Nominal_norm"][-1]) / sample_dis
-#     Nf_round = int(np.round(Nf))
-#     sample_array_NGAf = np.array(Family["Nominal_norm"][::Nf_round])
-#     NGAf_mu, NGAf_sig = np.array(Family["fit"]["mu"]), np.array(Family["fit"]["sigma"])
-
-#     fig, ax2 = plt.subplots(1, 1, figsize=(15, 9), sharey=True)
-#     fig.suptitle(f"{body}, Integrator: {Int}, dt: {dt} [sec]")
-
-#     ax2.set_xlabel("Heliocentric distance")
-#     ax2.plot(sample_array_NGAf, NGAf_mu/1000, color="red", label=r"$\mu$ [km]")
-#     ax2.plot(sample_array_NGAf, NGAf_sig/1000, color="blue", label=r"$\sigma$ [km]")
-#     ax2.axvline(x=1, linestyle="dotted", color="black", label="1 AU")
-#     ax2.grid(True, which="both")
-
-#     plt.tight_layout()
-#     # plt.savefig(f"{img_save_dir}/stats_timeline.pdf",dpi=300)
-#     plt.show()
-#     # plt.close()
-
-# def plot_histogram_peri(hist_data, simulation_info):
-#     body = simulation_info['Body']
-#     values = np.array(list(hist_data.values()))/ 1000
-
-#     fig, axes = plt.subplots(1, 1, figsize=(14, 6), sharey=True)
-
-#     mu, sigma = norm.fit(values)
-#     count, bins, _ = axes.hist(values, bins=50, density=True,
-#                                 color="steelblue", alpha=0.6, edgecolor="k", label="Histogram")
-
-#     x = np.linspace(min(values), max(values), 2000)
-#     pdf = norm.pdf(x, mu, sigma)
-#     axes.plot(x, pdf, 'r-', lw=2, label=f"Normal fit\nμ={mu:.4e}, σ={sigma:.3e}")
-
-#     axes.set_xlabel(rf"Deviation at perihelion [km]")
-#     axes.set_ylabel("Probability density")
-#     axes.grid(alpha=0.3)
-
-#     fig.suptitle(
-#         f"Position distribution of deviations at 1 AU for comet {body}\n"
-#         # f"Integrator: {simulation_info['Integrator']}, dt: {simulation_info['dt']}, "
-#         f"samples: {simulation_info['N_clones']}, Observations: {simulation_info['used_obs']}"
-#     )
-
-#     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-#     # plt.savefig(f"{img_save_dir}/Histogram_1AU.pdf", dpi=300)
-#     plt.show()
-#     # plt.close()
-
-# def plot_div_traj(data,info):
-#     trajectories = data["Clone_Divergence_Norm"]
-#     clone_norm = data["Clone_norm"]
-#     for idx in range(len(trajectories)):
-#         plt.plot(clone_norm[idx]/const.au,trajectories[idx]/1000)
-#     plt.xlabel("Distance [AU]")
-#     plt.ylabel(r"$||\Delta{r}|| [km]$")
-#     plt.title(f"divergence of {info['N_clones']} clones, Number of observations: {info['used_obs']}\n Integrator: {info['Integrator']}{info['Integrator_type']}, timestep: {info['timestep']}")
-#     plt.show()
-
-# # plot_divergence_timeline(Family,0.2,info)
-# # plot_histogram_peri(Family["Clone_Divergence_Norm_peri"],info)
-# # plot_div_traj(Family,info)

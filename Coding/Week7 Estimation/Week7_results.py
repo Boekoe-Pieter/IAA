@@ -51,7 +51,7 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # ----------------------------------------------------------------------
 
 # samples
-Orbit_samples = 100
+Orbit_samples = 10
 Observation_step_size = 330
 np.random.seed(42)
 
@@ -178,10 +178,13 @@ for body in all_results:
         )
 
     directory_name = f"{rel_dir}/plots_{designator}"
-
+    
+    print("--------------------------------------------------------------------")
     print(f"SPKid: {spkid} for body {name}")
     print("First obs:", first_obs)
     print("Last obs:", last_obs)
+    print("--------------------------------------------------------------------"\
+          "\n")
 
     # ----------------------------------------------------------------------
     # Convert calander dates and JD to Epochs
@@ -278,7 +281,8 @@ for body in all_results:
 
     comet_states = np.vstack(list(Reference_orbit_results.values()))
     comet_pos = comet_states[:, :3]/constants.ASTRONOMICAL_UNIT
-    
+
+    print("--------------------------------------------------------------------")
     print(f"propagated final state: {min(np.linalg.norm(comet_pos,axis=1))}")
     
     Final_state_spice = spice.get_body_cartesian_state_at_epoch(
@@ -288,10 +292,11 @@ for body in all_results:
         "NONE",
         SSE_tp,
     )
-
     print(f"Spice final state: {np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT}")
-    print(f"difference {(np.linalg.norm(comet_pos[-1])-np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT)*constants.ASTRONOMICAL_UNIT/1000}")
-    
+    print(f"Difference: {(np.linalg.norm(comet_pos[-1])-np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT)*constants.ASTRONOMICAL_UNIT/1000}")
+    print("--------------------------------------------------------------------"\
+          "\n")
+
     # ----------------------------------------------------------------------
     # Define Observatory
     # ----------------------------------------------------------------------
@@ -458,24 +463,19 @@ for body in all_results:
         data_to_write["Estimated_Reference_trajectory"][sim] = np.vstack(ephemeris_estimated)
         data_to_write["Estimated_Reference_trajectory_times"][sim] = np.vstack(times)
 
+        print("--------------------------------------------------------------------")
         state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
         print("Estimated start state m & m/s and norm in AU")
         print(np.array(state_est))
         print(np.linalg.norm(np.array(state_est)[:3])/constants.ASTRONOMICAL_UNIT)
 
-        state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
-        print("Estimated start state from list m & m/s and norm in AU")
-        print(np.array(ephemeris_estimated[0]))
-        print(np.linalg.norm(np.array(ephemeris_estimated[0])[:3])/constants.ASTRONOMICAL_UNIT)
-
         state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_end)
         print("Estimated final state m & m/s and norm in AU")
         print(np.array(state_est))
         print(np.linalg.norm(np.array(state_est)[:3])/constants.ASTRONOMICAL_UNIT)
-        print("Estimated start state from list m & m/s and norm in AU")
-        print(np.array(ephemeris_estimated[-1]))
-        print(np.linalg.norm(np.array(ephemeris_estimated[-1])[:3])/constants.ASTRONOMICAL_UNIT)
-        
+        print("--------------------------------------------------------------------"\
+            "\n")
+  
         # ----------------------------------------------------------------------
         # Covariance estimation
         # ----------------------------------------------------------------------
@@ -580,6 +580,7 @@ for body in all_results:
             data_to_write["observation_times"][sim] = current_times
             data_to_write["Sim_info"][sim] = {
             "Orbit_samples": Orbit_samples,
+            "N_obs": n_obs
             }
         data_to_write['environment'] = bodies_to_create
 
