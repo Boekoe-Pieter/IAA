@@ -93,9 +93,9 @@ for comet, data in files_dict.items():
         # ---------------------------------
         # Simulator
         covariance, _= Util.extract_traditional_covariance(covar_file)
-        _, start_time_epoch_covariance= Util.extract_traditional_covariance(covar_file)
+        # _, start_time_epoch_covariance= Util.extract_traditional_covariance(covar_file)
 
-        start_time_epoch_oscullating = total_data["objects"][body]["elements"].get("epoch")
+        # start_time_epoch_oscullating = total_data["objects"][body]["elements"].get("epoch")
         start_time_first_obs = total_data["objects"][body]["observations"].get("earliest")
 
         end_time = total_data["objects"][body]["elements"].get("Tp_iso").replace("Z", "")
@@ -103,7 +103,7 @@ for comet, data in files_dict.items():
         start_time_MJD = time_representation.julian_day_to_modified_julian_day(start_time_first_obs)
         end_time_MJD =  time_representation.julian_day_to_modified_julian_day(time_representation.seconds_since_epoch_to_julian_day(time_representation.iso_string_to_epoch(str(end_time))))
 
-        end_time_MJD_int = math.ceil(end_time_MJD)+5
+        # end_time_MJD_int = math.ceil(end_time_MJD)+5
 
         sim = Util.create_sim(primary,start_time_MJD,Integrator,timestep)
         # times = np.arange(start_time_MJD, end_time_MJD_int+timestep, timestep)
@@ -168,7 +168,7 @@ for comet, data in files_dict.items():
         # covar state is in Tp ,e, q , 1/a , i  , omega,  Omega
         # initial conditions is in: e,a,q,i,om,w,Tp_mjd
         e,a,q,i,om,w,Tp_mjd = initial_conidtions
-        Tp_jd = time_representation.modified_julian_day_to_julian_day(Tp_mjd)
+        # Tp_jd = time_representation.modified_julian_day_to_julian_day(Tp_mjd)
         sampled_intial = np.array([Tp_mjd,e,q,1/a,np.rad2deg(i),np.rad2deg(w),np.rad2deg(om)])
         samples = np.random.multivariate_normal(sampled_intial, covariance, size=N_samples)
         def add_clones(ref_sim):
@@ -178,7 +178,7 @@ for comet, data in files_dict.items():
                 Tp_mjd, e, q, inv_a, i_deg, w_deg, om_deg = s
                 if e <= 0 or e >= 2:
                     continue
-                if (a > 0 and e > 1) or (a < 0 and e < 1):
+                if (q/(1-e) > 0 and e > 1) or (q/(1-e) < 0 and e < 1):
                     continue
                 valid_idx += 1
                 hash_id = f"{valid_idx}"
