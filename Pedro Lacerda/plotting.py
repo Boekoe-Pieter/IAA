@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
-import matplotlib.patches as patches
+# from matplotlib.patches import Patch
+# import matplotlib.patches as patches
 
 import pickle
 import scipy.constants as const
@@ -52,7 +52,7 @@ valid_clone_dict = {
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
 base_path = "Pedro Lacerda/"
-comet = 'C2008A1'
+comet = 'C2013US10'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
@@ -94,6 +94,8 @@ for sim_folder in sorted(os.listdir(comet_path), key=natural_key):
     if info['used_obs'] < pref_Nobs:
         continue
     pref_Nobs = info['used_obs']
+    if (comet == "C2008A1") and (info['used_obs']==41):
+        continue
 
     def compute_family(dict, data):
         monte_sample = data['Monte_trajectory']
@@ -497,16 +499,16 @@ width = -60
 
 x_start = 60      
 y_start = 0
-square = patches.Rectangle(
-    (x_start, y_start),   
-    width,                 
-    height_pos,                
-    linewidth=1,
-    edgecolor='black',
-    facecolor='green',
-    alpha=0.3             
-)
-ax.add_patch(square)
+# square = patches.Rectangle(
+#     (x_start, y_start),   
+#     width,                 
+#     height_pos,                
+#     linewidth=1,
+#     edgecolor='black',
+#     facecolor='green',
+#     alpha=0.3             
+# )
+# ax.add_patch(square)
 
 plt.gca().invert_xaxis()
 plt.yscale("log")
@@ -549,16 +551,16 @@ width = -60
 
 x_start = 60      
 y_start = 0
-square = patches.Rectangle(
-    (x_start, y_start),   
-    width,                 
-    height_vel,                
-    linewidth=1,
-    edgecolor='black',
-    facecolor='green',
-    alpha=0.3             
-)
-ax.add_patch(square)
+# square = patches.Rectangle(
+#     (x_start, y_start),   
+#     width,                 
+#     height_vel,                
+#     linewidth=1,
+#     edgecolor='black',
+#     facecolor='green',
+#     alpha=0.3             
+# )
+# ax.add_patch(square)
 
 plt.gca().invert_xaxis()
 

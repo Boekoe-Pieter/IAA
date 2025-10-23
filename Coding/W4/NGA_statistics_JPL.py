@@ -47,7 +47,7 @@ for body in all_results:
 
     A1_list.append(A1*10**8)
     A2_list.append(A2*10**8)
-    A3_list.append(abs(A3*10**8))
+    A3_list.append(A3*10**8)
 
 A1_array = np.array(A1_list)
 A2_array = np.array(A2_list)
@@ -65,17 +65,18 @@ def plot_histograms_with_mean_subplot(category_name, A_list, B_list, C_list):
         data_array = np.array(data)
         mean_val = np.median(data_array)
         std_val = np.std(data_array)
-        print(mean_val)
+
         ax = plt.subplot(1, 3, i+1)
         ax.hist(data_array, bins=50, color=color, alpha=0.7, density=True)
         ax.axvline(mean_val, color='k', linestyle='--', label=f'Median = {mean_val:.3f}\nStd = {std_val:.3f}')
         ax.set_xlabel(xlabel)
-        ax.set_ylabel('Density')
+        ax.set_ylabel('probability density')
         ax.set_title(f'{category_name} - {labels}')
         ax.legend()
+        ax.grid()
     
     plt.tight_layout()
-    plt.savefig(f"Histogram_{category_name}")
+    plt.savefig(f"Histogram_{category_name}.pdf",dpi=300)
     plt.show()
 
 A1_CoCO, A2_CoCO, A3_CoCO = [], [], []

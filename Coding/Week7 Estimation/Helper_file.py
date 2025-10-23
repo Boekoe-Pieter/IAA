@@ -32,13 +32,14 @@ def sbdb_query(classes,request_filter):
 
 def sbdb_query_info(target_body,full_precision=False):
     target_sbdb = SBDBquery(target_body,full_precision=full_precision)
-
+    print(target_sbdb)
     # get body name information
     spkid = target_sbdb['object']['spkid']
     name  = target_sbdb['object']['fullname']
     designator = target_sbdb['object']['des']
     comet_designation = np.array([spkid,name,designator])
-
+    
+ 
     # get body time information
     first_obs = target_sbdb['orbit']['first_obs']
     last_obs  = target_sbdb['orbit']['last_obs']
@@ -54,8 +55,9 @@ def sbdb_query_info(target_body,full_precision=False):
     M = target_sbdb["orbit"]['elements'].get('ma').value
     n = target_sbdb["orbit"]['elements'].get('n').value
     Tp = target_sbdb["orbit"]['elements'].get('tp').value
-    
-    Oscullating_elements = np.array([e,a,q,i,om,w,M,n,Tp])
+    epoch = target_sbdb["orbit"].get("epoch").value
+
+    Oscullating_elements = np.array([e,a,q,i,om,w,M,n,Tp,epoch])
 
     # get NGA parameters
     A1 = target_sbdb["orbit"]["model_pars"].get("A1")
@@ -244,12 +246,27 @@ def Accelerations(spkid,bodies, bodies_to_propagate, central_bodies,NGA_array,NG
 
     return acceleration_models
 
+def twoBP(spkid, bodies, bodies_to_propagate, central_bodies):
+    accelerations = {
+        "Sun": [
+            propagation_setup.acceleration.point_mass_gravity(),
+        ],
+
+        }
+    
+    acceleration_settings = {str(spkid): accelerations}   
+
+    acceleration_models = propagation_setup.create_acceleration_models(
+        bodies, acceleration_settings, bodies_to_propagate, central_bodies
+    ) 
+    return acceleration_models
+
 def integrator_settings(timestep_global,variable=False):
     if variable:
         integrator_settings = propagation_setup.integrator.runge_kutta_variable_step_size(
             timestep_global,
             timestep_global,
-            propagation_setup.integrator.CoefficientSets.rkf_1210,
+            propagation_setup.integrator.CoefficientSets.rkf_56,
             timestep_global,
             timestep_global,
             1.0,
@@ -258,16 +275,16 @@ def integrator_settings(timestep_global,variable=False):
     else:
         integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
                 time_step = timestep_global,
-                coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_1210,
+                coefficient_set = propagation_setup.integrator.CoefficientSets.rkf_56,
                 order_to_use = propagation_setup.integrator.OrderToIntegrate.higher )  
         
     return integrator_settings
 
 def initial_state(Start_time,osculating_elements,bodies):
-    e,a,q,i,om,w,M,n,Tp = osculating_elements
+    e,a,q,i,om,w,M,n,Tp,epoch = osculating_elements
 
-    Shifter = time_representation.julian_day_to_seconds_since_epoch(Tp)
-    delta_t = Shifter-Start_time
+    End_time = time_representation.julian_day_to_seconds_since_epoch(epoch)
+    delta_t = End_time-Start_time
     M0=M-n*delta_t/constants.JULIAN_DAY #M in degrees, n in deg/day delta_t in seconds automatically uses hyperbolic if e>1
     true_anomaly_start = element_conversion.mean_to_true_anomaly(e, np.deg2rad(M0))
 

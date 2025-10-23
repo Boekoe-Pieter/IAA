@@ -19,9 +19,9 @@ import sys
 
 # python files
 import Helper_file
-from Plotter import observations_Plotter as obs_plot
-from Plotter import estimation_plotter as est_plot
-from Plotter import statistics_plotter as stat_plot
+from Plotter import Observations_Plotter as ObsPlot
+from Plotter import estimation_plotter as EstPlot
+from Plotter import statistics_plotter as StatPlot
 
 np.set_printoptions(linewidth=160)
 # ----------------------------------------------------------------------
@@ -51,15 +51,15 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # ----------------------------------------------------------------------
 
 # samples
-Orbit_samples = 10
-Observation_step_size = 330
+Orbit_samples = 1000
+Observation_step_size = 165
 np.random.seed(42)
 
 # number of iterations for our estimation
 number_of_pod_iterations = 6
 
 # timestep of 1 hours for our estimation
-timestep_global = 48*3600
+timestep_global = 24*3600
 
 # avoid interpolation errors:
 time_buffer = 31*86400 
@@ -70,7 +70,7 @@ global_frame_origin = "Sun"
 global_frame_orientation = "ECLIPJ2000"
 
 # NGA on or off for orbit propagation
-NGA_Flag = False
+NGA_Flag = True
 
 # ----------------------------------------------------------------------
 # Define the Environment
@@ -137,6 +137,8 @@ all_results = ["C2001Q4"] #,"C2008A1","C2013US10"]
 for body in all_results:
     # saving dictionary
     data_to_write = {
+        "Spice_Reference_trajectory": 0,
+
         "Truth_Reference_trajectory":0,
         "Truth_Reference_trajectory_times":0,
 
@@ -166,7 +168,7 @@ for body in all_results:
 
     first_obs,last_obs = comet_time_information
 
-    e,a,q,i,om,w,M,n,Tp = Oscullating_elements
+    e,a,q,i,om,w,M,n,Tp,epoch= Oscullating_elements
 
     A1,A2,A3,DT = non_gravitational_parameters
 
@@ -185,6 +187,20 @@ for body in all_results:
     print("Last obs:", last_obs)
     print("--------------------------------------------------------------------"\
           "\n")
+
+    # saving directory for comet
+    try:
+        os.mkdir(directory_name)
+        print(f"Directory '{directory_name}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}' already exists.")
+    addition = "/NGA_True" if NGA_Flag else "/NGA_False"
+    # saving directory for NGA flag
+    try:
+        os.mkdir(f"{directory_name}{addition}")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}' already exists.")
 
     # ----------------------------------------------------------------------
     # Convert calander dates and JD to Epochs
@@ -230,6 +246,9 @@ for body in all_results:
     # ----------------------------------------------------------------------
     # Define accelerations, integration and propagation settings
     # ----------------------------------------------------------------------
+    bodies_to_propagate = [str(spkid)]
+
+    # Spice Initial
     initial_state_reference = spice.get_body_cartesian_state_at_epoch(
         str(spkid),
         global_frame_origin,
@@ -238,18 +257,28 @@ for body in all_results:
         SSE_start,
     )
 
-    dependent_variables_to_save = [
-        propagation_setup.dependent_variable.relative_position(body, "Sun")
-        for body in bodies_to_create]
-    
-    bodies_to_propagate = [str(spkid)]
-    
     acceleration_models = Helper_file.Accelerations(spkid,
                                                     bodies, 
                                                     bodies_to_propagate, 
                                                     central_bodies,
                                                     NGA_array,
                                                     NGA_Flag=NGA_Flag)
+
+    print(np.linalg.norm(initial_state_reference[:3])/constants.ASTRONOMICAL_UNIT)
+
+    # SBDB Oscullating Initial
+    # initial_state_reference = Helper_file.initial_state(SSE_start,Oscullating_elements,bodies)
+    
+    # print(np.linalg.norm(initial_state_reference[:3])/constants.ASTRONOMICAL_UNIT)
+
+    # acceleration_models = Helper_file.twoBP(spkid,
+    #                                         bodies, 
+    #                                         bodies_to_propagate, 
+    #                                         central_bodies)
+
+    dependent_variables_to_save = [
+        propagation_setup.dependent_variable.relative_position(body, "Sun")
+        for body in bodies_to_create]
     
     integrator_settings = Helper_file.integrator_settings(timestep_global,
                                                           variable=False)
@@ -270,9 +299,21 @@ for body in all_results:
     Reference_orbit_results = Reference_orbit_simulator.propagation_results.state_history
     Reference_orbit_dependent = Reference_orbit_simulator.propagation_results.dependent_variable_history
 
-    data_to_write["Truth_Reference_trajectory"] = np.vstack(list(Reference_orbit_results.values()))
-    data_to_write["Truth_Reference_trajectory_times"] = np.vstack(list(Reference_orbit_results.keys()))
-    
+    data_to_write["Truth_Reference_trajectory"] = np.vstack(np.array(list(Reference_orbit_results.values())))
+    data_to_write["Truth_Reference_trajectory_times"] = np.vstack(np.array(list(Reference_orbit_results.keys())))
+
+    times = np.arange(SSE_start, SSE_end, timestep_global)
+    if not np.isclose(times[-1], SSE_end, rtol=1e-10, atol=1e-10):
+        times = np.append(times, SSE_end)
+
+    ephemeris_spice = np.zeros((len(times), 6))
+    for i, time in enumerate(times):
+        ephemeris_spice[i] = spice.get_body_cartesian_state_at_epoch(
+            str(spkid), central_bodies[0], global_frame_orientation, "NONE", time
+        )
+
+    data_to_write["Spice_Reference_trajectory"]=np.vstack(ephemeris_spice)
+
     for i, disturber in enumerate(bodies_to_create):
         Trajectory_info = np.vstack(list(Reference_orbit_dependent.values()))
         start = i * 3
@@ -290,13 +331,12 @@ for body in all_results:
         global_frame_origin,
         global_frame_orientation,
         "NONE",
-        SSE_tp,
+        SSE_end,
     )
     print(f"Spice final state: {np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT}")
-    print(f"Difference: {(np.linalg.norm(comet_pos[-1])-np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT)*constants.ASTRONOMICAL_UNIT/1000}")
+    print(f"Difference: {np.linalg.norm((comet_pos[-1]-Final_state_spice[:3]/constants.ASTRONOMICAL_UNIT))*constants.ASTRONOMICAL_UNIT/1000}")
     print("--------------------------------------------------------------------"\
-          "\n")
-
+          )
     # ----------------------------------------------------------------------
     # Define Observatory
     # ----------------------------------------------------------------------
@@ -390,6 +430,8 @@ for body in all_results:
     sim = 1
     for n_obs in observation_counts:
         
+        print(f"\n"\
+              "Estimating with {n_obs} observations")
         # populate the dictionaries
         data_to_write['Montecarlo_trajectory'].setdefault(sim, {})
         data_to_write['Montecarlo_trajectory_times'].setdefault(sim, {})
@@ -464,22 +506,22 @@ for body in all_results:
         data_to_write["Estimated_Reference_trajectory_times"][sim] = np.vstack(times)
 
         print("--------------------------------------------------------------------")
-        state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
+        state_est_start = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
         print("Estimated start state m & m/s and norm in AU")
-        print(np.array(state_est))
-        print(np.linalg.norm(np.array(state_est)[:3])/constants.ASTRONOMICAL_UNIT)
+        print(np.array(state_est_start))
+        print(np.linalg.norm(np.array(state_est_start)[:3])/constants.ASTRONOMICAL_UNIT)
 
-        state_est = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_end)
+        state_est_end = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_end)
         print("Estimated final state m & m/s and norm in AU")
-        print(np.array(state_est))
-        print(np.linalg.norm(np.array(state_est)[:3])/constants.ASTRONOMICAL_UNIT)
+        print(np.array(state_est_end))
+        print(np.linalg.norm(np.array(state_est_end)[:3])/constants.ASTRONOMICAL_UNIT)
         print("--------------------------------------------------------------------"\
-            "\n")
+            )
   
         # ----------------------------------------------------------------------
         # Covariance estimation
         # ----------------------------------------------------------------------
-        
+
         # Create input object for covariance analysis
         covariance_input = estimation_analysis.CovarianceAnalysisInput(
             simulated_observations)
@@ -494,21 +536,20 @@ for body in all_results:
         # ----------------------------------------------------------------------
         # Plot observations & estimation 
         # ----------------------------------------------------------------------
-        
-        # saving directory for comet
-        try:
-            os.mkdir(directory_name)
-            print(f"Directory '{directory_name}' created successfully.")
-        except FileExistsError:
-            print(f"Directory '{directory_name}' already exists.")
-        addition = "/NGA_True" if NGA_Flag else "/NGA_False"
-        # saving directory for NGA flag
-        try:
-            os.mkdir(f"{directory_name}{addition}")
-            print(f"Directory '{directory_name}{addition}' created successfully.")
-        except FileExistsError:
-            print(f"Directory '{directory_name}{addition}' already exists.")
-        
+        print("--------------------------------------------------------------------")
+        print("Plotting observations and estimation")
+        obs = ObsPlot(sim,name, simulated_observations, directory_name, addition)
+        obs.RADEC_overtime()
+        obs.skyplot()
+        obs.aitoff()
+
+        est = EstPlot(sim,name, number_of_pod_iterations, pod_output,
+                    simulated_observations, covariance_output,
+                    parameters_to_estimate, directory_name, addition)
+        est.correlation()
+        est.residuals(simulated_observations)
+        est.formal_erros()
+
         info_dict_synobs = {
             'Name': name,
             'SPK-id': spkid,
@@ -553,12 +594,8 @@ for body in all_results:
         
         dependent_variables_to_save = []
         subdir = f"{directory_name}/Simulation_{sim}"
-        # try:
-        #     os.mkdir(subdir)
-        #     print(f"Directory '{subdir}' created successfully.")
-        # except FileExistsError:
-        #     print(f"Directory '{subdir}' already exists.")
-
+        print("--------------------------------------------------------------------")
+        print("Performing Monte Carlo")
         for i, sampled_conditions in enumerate(samples):
             propagator_settings_sample = Helper_file.propagator_settings(
                                                                 integrator_settings,
@@ -580,12 +617,24 @@ for body in all_results:
             data_to_write["observation_times"][sim] = current_times
             data_to_write["Sim_info"][sim] = {
             "Orbit_samples": Orbit_samples,
-            "N_obs": n_obs
+            "N_obs": n_obs,
+            "Integrator": "rkf_56",
+            "Time_step": timestep_global
             }
+
+            progress = (i + 1) / len(samples)
+            bar_length = 30
+            bar = '=' * int(bar_length * progress) + '-' * (bar_length - int(bar_length * progress))
+            sys.stdout.write(f"\rProgress: [{bar}] {progress * 100:.1f}%")
+            sys.stdout.flush()
+
         data_to_write['environment'] = bodies_to_create
 
         sim += 1
-    
-    stat_plot = stat_plot(data_to_write,info_dict_synobs)
-    stat_plot.plot_3D()
-    stat_plot.boxplot()
+
+    stat = StatPlot(data_to_write,info_dict_synobs,directory_name,addition)
+    stat.plot_3D()
+    stat.boxplot()
+    stat.fit()
+    stat.ref_to_spice()
+    stat.clone_divergence()

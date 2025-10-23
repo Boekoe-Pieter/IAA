@@ -11,9 +11,12 @@ from tudatpy import constants
 AU = constants.ASTRONOMICAL_UNIT
 day = constants.JULIAN_DAY
 
-class observations_Plotter:
-    def __init__(self,name,simulated_observations):
+class Observations_Plotter:
+    def __init__(self,sim,name,simulated_observations,directory_name,addition):
+        self.sim = sim
+
         self.name = name
+        self.saving_dir = f"{directory_name}{addition}"
 
         self.simulated_observations = simulated_observations
 
@@ -31,10 +34,11 @@ class observations_Plotter:
 
         self.time_days = (np.array(self.epochs)[0] - self.epochs[0][0]) / (3600.0*24)
 
-    def RADEC_overtime(self,directory_name,addition):
+    def RADEC_overtime(self):
         # ----------------------------------------------------------------------
         # RA/DEC over time
         plt.figure(figsize=(10,4))
+        plt.suptitle(f"RA and DEC ober time for {len(self.ra_deg[0])} observations")
         plt.subplot(1,2,1)
 
         plt.scatter(self.time_days, self.ra_deg, s=2, label="Batch")
@@ -52,32 +56,33 @@ class observations_Plotter:
         plt.title("Simulated Dec")
 
         plt.tight_layout()
-        plt.savefig(f"{directory_name}{addition}/Obs_RADEC_time.pdf", dpi=300)
+        plt.savefig(f"{self.saving_dir}/Observation/{self.sim}_RADEC_time.pdf", dpi=300)
         plt.close()
     
-    def skyplot(self,directory_name,addition):
+    def skyplot(self):
         # ----------------------------------------------------------------------
         # RA/DEC Skyplot
         plt.figure(figsize=(7,7))
         sc = plt.scatter(self.ra_deg, self.dec_deg, c=self.time_days, cmap='viridis', s=2)
         plt.xlabel("Right Ascension [deg]")
         plt.ylabel("Declination [deg]")
-        plt.title(f"Sky Track, comet:{self.name},Nobs: {len(self.ra_deg)}")
+        plt.title(f"Sky Track, comet:{self.name},Nobs: {len(self.ra_deg[0])}")
         plt.gca().invert_xaxis()  
         plt.grid(True)
 
         cbar = plt.colorbar(sc)
         cbar.set_label("Time [days]")
-        plt.savefig(f"{directory_name}{addition}/Obs_RADEC_skyplot.pdf", dpi=300)
+        plt.savefig(f"{self.saving_dir}/Observation/{self.sim}_RADEC_skyplot.pdf", dpi=300)
         plt.close()
 
-    def aitoff(self,directory_name,addition):
+    def aitoff(self):
         # ----------------------------------------------------------------------
         # Aitoff Projection
         ra_rad = np.deg2rad(self.ra_deg)
         dec_rad = np.deg2rad(self.dec_deg)
 
         plt.figure(figsize=(10,5))
+        plt.title(f"Aitoff projection of {self.name} and {len(self.ra_deg[0])} observations")
         ax = plt.subplot(111, projection='aitoff')
 
         sc = ax.scatter(ra_rad, dec_rad, c=self.time_days, cmap='viridis', s=5)
@@ -89,12 +94,14 @@ class observations_Plotter:
         cbar.set_label("Time [days]")
 
         plt.tight_layout()
-        plt.savefig(f"{directory_name}{addition}/Obs_RADEC_Aitoff.pdf", dpi=300)
+        plt.savefig(f"{self.saving_dir}/Observation/{self.sim}_RADEC_Aitoff.pdf", dpi=300)
         plt.close()
 
 class estimation_plotter:
-    def __init__(self,name,pod_it,pod_output,simulated_observations,covariance_output,parameters_to_estimate,state_transition):
+    def __init__(self,sim,name,pod_it,pod_output,simulated_observations,covariance_output,parameters_to_estimate,directory_name,addition):
+        self.sim = sim
         self.name = name
+        self.saving_dir = f"{directory_name}{addition}"
 
         self.simulated_observations = simulated_observations
         self.pod_output = pod_output
@@ -102,7 +109,6 @@ class estimation_plotter:
 
         self.covariance_output = covariance_output
         self.parameters_to_estimate = parameters_to_estimate
-        self.state_transition = state_transition
 
         self.observation_times = simulated_observations.get_observation_times
         self.simulated_observations = simulated_observations.get_observations
@@ -117,7 +123,7 @@ class estimation_plotter:
             self.dec_deg.append(np.rad2deg(obs[1::2]))
         self.time_days = (np.array(self.epochs) - self.epochs[0])/ (3600.0*24)
 
-    def residuals(self,directory_name,addition,simulated_observations):
+    def residuals(self,simulated_observations):
         # ----------------------------------------------------------------------
         # Plotting of the residuals
         residual_history = self.pod_output.residual_history
@@ -169,7 +175,7 @@ class estimation_plotter:
             )
             ax.set_ylabel("Observation Residual [rad]")
             ax.set_title("Iteration " + str(idx + 1))
-
+        
         plt.tight_layout()
 
         # add the year label for the x-axis
@@ -177,10 +183,10 @@ class estimation_plotter:
             axs[int(number_of_rows - 1), col].set_xlabel("Year")
 
         axs[0, 0].legend()
-        plt.savefig(f"{directory_name}{addition}/Est_Residuals.pdf", dpi=300)
+        plt.savefig(f"{self.saving_dir}/Estimation/{self.sim}_Residuals.pdf", dpi=300)
         plt.close()
 
-    def correlation(self,directory_name,addition):
+    def correlation(self):
         # ----------------------------------------------------------------------
         # correlation plot
         corr_matrix = self.covariance_output.correlations
@@ -206,10 +212,10 @@ class estimation_plotter:
         fig.suptitle(f"Correlation matrix for estimated parameters of {self.name}")
 
         fig.tight_layout()
-        plt.savefig(f"{directory_name}{addition}/Est_Corr_matrix.pdf", dpi=300)
+        plt.savefig(f"{self.saving_dir}/Estimation/{self.sim}_Corr_matrix.pdf", dpi=300)
         plt.close()
 
-    def formal_erros(self,directory_name,addition):
+    def formal_erros(self):
         # ----------------------------------------------------------------------
         # Formal Errors and Covariance Matrix
         x_star = self.parameters_to_estimate.parameter_vector # Nominal solution (center of the ellipsoid)
@@ -328,13 +334,15 @@ class estimation_plotter:
         diagonal_ax.legend(loc = 'upper right')
 
         plt.legend()
-        plt.savefig(f"{directory_name}{addition}/Est_Confidence.pdf", dpi=300)
+        plt.savefig(f"{self.saving_dir}/Estimation/{self.sim}_Confidence.pdf", dpi=300)
         plt.close()
 
 class statistics_plotter:
-    def __init__(self,data,info_dict_synobs):
+    def __init__(self,data,info_dict_synobs,directory_name,addition):
         self.data = data
         self.info = info_dict_synobs
+
+        self.saving_dir = f"{directory_name}{addition}"
 
         self.Family = {
             "Truth_norm":{},
@@ -421,7 +429,6 @@ class statistics_plotter:
                     last_obs = self.data["observation_times"][sim][-1]
 
                     N_obs = self.data["Sim_info"][sim].get("N_obs")
-                    print(N_obs)
                     dt_days_peri = (perihelion - last_obs) / constants.JULIAN_DAY
 
                     # ----------------------------------------------------------------------
@@ -531,8 +538,8 @@ class statistics_plotter:
             ax.add_artist(leg3)
 
             plt.title(f"{n_clones} Monte Carlo samples of comet {info['Name']} — {info['Observations']} observations")
-            # plt.savefig(f"{self.base_path}/{self.comet}_3D_trajectory.pdf", dpi=300)
-            plt.show()
+            plt.savefig(f"{self.saving_dir}/3D_trajectory_worstfit.pdf", dpi=300)
+            plt.close() 
 
         keys = list(self.data["Estimated_Reference_trajectory"].keys())
         best_key = keys[0]
@@ -542,14 +549,13 @@ class statistics_plotter:
         worst_fit = self.data["Estimated_Reference_trajectory"][worst_key]
 
         plot_ensemble(self.data,self.data["Montecarlo_trajectory"][worst_key],worst_fit,self.info, n_clones=self.info['Orbit_clones'])
-        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][best_key],best_fit,self.info, n_clones=self.info['Orbit_clones'])
 
     def boxplot(self, extra_time=15):
         comet = self.info["Name"]
         info = self.info
         stats = self.general_statistics
 
-        def make_boxplot(divergence_dict, height, ylabel, title_suffix, scale=1.0, save_name=None, xlabel=r"$\Delta{Days}$"):
+        def make_boxplot(divergence_dict, height, ylabel, title, scale=1.0, save_name=None, xlabel=r"$\Delta{Days}$"):
             dt = sorted(divergence_dict.keys(), reverse=True)
             data = [np.array(divergence_dict[n]) / scale for n in dt]
 
@@ -571,43 +577,43 @@ class statistics_plotter:
                 plt.xticks(time, rotation=70)
                 plt.gca().invert_xaxis()
 
-            # width = -60
-            # x_start = 60
-            # y_start = 0
-            # square = patches.Rectangle(
-            #     (x_start, y_start),
-            #     width,
-            #     height,
-            #     linewidth=1,
-            #     edgecolor='black',
-            #     facecolor='green',
-            #     alpha=0.3
-            # )
-            # ax.add_patch(square)
+                # width = -60
+                # x_start = 60
+                # y_start = 0
+                # square = patches.Rectangle(
+                #     (x_start, y_start),
+                #     width,
+                #     height,
+                #     linewidth=1,
+                #     edgecolor='black',
+                #     facecolor='green',
+                #     alpha=0.3
+                # )
+                # ax.add_patch(square)
 
             plt.yscale("log")
             plt.ylabel(ylabel)
             plt.xlabel(xlabel)
             plt.title(
-                f"{title_suffix} {comet}\n"
-                # f"{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
+                f"{title} {comet}\n"
+                # f"{data['Sim_info'][sim]} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
             )
             plt.grid(axis="y", linestyle="--", alpha=0.7)
             plt.tight_layout()
 
             if save_name:
                 plt.savefig(f"{save_name}.pdf", dpi=300)
-            plt.show()
+            plt.close() 
 
         # ------------------------------------------------------
         # Position boxplot
         make_boxplot(
             stats["Clone_Divergence_Norm_peri_DPERI"][comet],
-            height=1000,
+            height=1e3,
             ylabel="Clone Position Divergence Norm at perihelion [km]",
-            title_suffix="Clone Position Divergence vs. Days to Perihelion",
+            title="Clone Position Divergence vs. Days to Perihelion",
             scale=1e3,
-            save_name=None
+            save_name=f"{self.saving_dir}/Stat_Position_boxplot_dtPeri"
         )
 
         # ------------------------------------------------------
@@ -616,29 +622,132 @@ class statistics_plotter:
             stats["Clone_Divergence_Vel_Norm_peri_DPERI"][comet],
             height=1,
             ylabel="Clone Velocity Divergence Norm at perihelion [m/s]",
-            title_suffix="Clone Velocity Divergence vs. Days to Perihelion",
+            title="Clone Velocity Divergence vs. Days to Perihelion",
             scale=1.0,
-            save_name=None
+            save_name=f"{self.saving_dir}/Stat_Velocity_boxplot_dtPeri"
         )
 
         # ------------------------------------------------------
         # N_obs boxplot
         make_boxplot(
             stats["Clone_Divergence_Norm_peri_NOBS"][comet],
-            height=1000,
-            ylabel="Number of Observations",
-            title_suffix="Clone Position Divergence Norm vs. Number of Observations",
-            scale=1.0,
+            height=1e3,
+            ylabel="Clone Position Divergence Norm at perihelion [km]",
+            title="Clone Position Divergence Norm vs. Number of Observations",
+            scale=1e3,
             xlabel="Number of Observations",
-            save_name=None  # f"{base_path}/{comet}_boxplot_NOBS"
+            save_name=f"{self.saving_dir}/Stat_Position_boxplot_NOBS"
         )
 
         make_boxplot(
-            stats["Clone_Divergence_Vel_Norm_NOBS"][comet],
+            stats["Clone_Divergence_Vel_Norm_peri_NOBS"][comet],
             height=1,
-            ylabel="Number of Observations",
-            title_suffix="Clone Velocity Divergence Norm vs. Number of Observations",
+            ylabel="Clone Velocity Divergence Norm at perihelion [m/s]",
+            title="Clone Velocity Divergence Norm vs. Number of Observations",
             scale=1.0,
             xlabel="Number of Observations",
-            save_name=None  # f"{base_path}/{comet}_boxplot_NOBS"
+            save_name=f"{self.saving_dir}/Stat_Velocity_boxplot_NOBS"
         )
+    
+    def fit(self):        
+        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+        Fit_trajectory = self.data["Estimated_Reference_trajectory"]
+        Times = (
+            np.array(self.data["Truth_Reference_trajectory_times"]) / (86400 * 365.25) + 2000
+        )
+        for sim, traj in Fit_trajectory.items():
+            Fit_pos = np.array(traj)[:, 0:3]
+            Truth_pos = np.array(Truth_trajectory)[:, 0:3]
+
+            diff_elements = Fit_pos - Truth_pos
+        
+            diff = np.linalg.norm(diff_elements[:,:3],axis=1)
+            fig, axs = plt.subplots(4, 1, figsize=(10, 8))
+
+            labels = ['x (km)', 'y (km)', 'z (km)']
+            for i in range(3):
+                axs[i].plot(Times, diff_elements[:, i] / 1e3, color='tab:blue')
+                axs[i].set_ylabel(labels[i])
+                axs[i].grid(True)
+
+            axs[2].set_xlabel('Time [Calender]')
+
+            distance_sorted = sorted(np.linalg.norm(Truth_trajectory,axis=1) / AU, reverse=True)
+            axs[3].plot(distance_sorted, diff / 1e3, color='tab:orange')
+            axs[3].set_ylabel(r'$||r_{diff}||$ (km)')
+            axs[3].grid(True)
+            axs[3].set_xlabel('Distance [AU]')
+            axs[3].invert_xaxis()
+
+            fig.suptitle(f'Difference between fitted orbit and truth orbit, {self.data["Sim_info"][sim].get("N_obs")} observations')
+            plt.tight_layout(rect=[0, 0, 1, 0.97])
+            plt.savefig(f"{self.saving_dir}/Fit_to_Truth/{sim}_Fit_to_Truth.pdf", dpi=300)
+            plt.close() 
+
+    def ref_to_spice(self):
+        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+        Spice = self.data["Spice_Reference_trajectory"]
+        Times = (
+            np.array(self.data["Truth_Reference_trajectory_times"]) / (86400 * 365.25) + 2000
+        )
+
+        Spice = np.array(Spice)[:, 0:3]
+        Truth_pos = np.array(Truth_trajectory)[:, 0:3]
+
+        diff_elements = Spice - Truth_pos
+    
+        diff = np.linalg.norm(diff_elements[:,:3],axis=1)
+        fig, axs = plt.subplots(4, 1, figsize=(10, 8))
+
+        labels = ['x (km)', 'y (km)', 'z (km)']
+        for i in range(3):
+            axs[i].plot(Times, diff_elements[:, i] / 1e3, color='tab:blue')
+            axs[i].set_ylabel(labels[i])
+            axs[i].grid(True)
+
+        axs[2].set_xlabel('Time [Calender]')
+
+        distance_sorted = sorted(np.linalg.norm(Truth_trajectory,axis=1) / AU, reverse=True)
+        axs[3].plot(distance_sorted, diff / 1e3, color='tab:orange')
+        axs[3].set_ylabel(r'$||r_{diff}||$ (km)')
+        axs[3].grid(True)
+        axs[3].set_xlabel('Distance [AU]')
+        axs[3].invert_xaxis()
+
+        fig.suptitle(f'Difference between Truth and Spice')
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.savefig(f"{self.saving_dir}/Truth_To_Spice.pdf", dpi=300)
+        plt.close() 
+    
+    def clone_divergence(self):
+        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+        Fit_trajectory = self.data["Estimated_Reference_trajectory"]
+        Clone_trajectory = self.data["Montecarlo_trajectory"]
+
+        Truth_pos = np.array(Truth_trajectory)[:, 0:3]
+
+
+        Truth_norm = np.linalg.norm(Truth_pos,axis=1)
+        for sim, sim_data in Clone_trajectory.items():
+
+            fig, axs = plt.subplots(1, 1, figsize=(10, 8))
+            fig.suptitle(f'Difference of the Fit and clones to the Truth orbit')
+            for key, traj in sim_data.items():
+
+                diff_norm = np.linalg.norm(Truth_pos-Clone_trajectory[sim][key][:, 0:3],axis=1)
+
+                axs.plot(Truth_norm/AU,diff_norm/1000)
+
+            Fit = np.array(Fit_trajectory[sim])[:, 0:3]
+            diff_truth_to_fit = Truth_pos - Fit
+            FIT_TRUTH_Dif = np.linalg.norm(diff_truth_to_fit, axis=1) 
+            axs.plot(Truth_norm/AU,FIT_TRUTH_Dif/1000,label='Fitted orbit',color="black",linewidth=3.0)
+            axs.invert_xaxis()
+            plt.legend()
+            plt.xlabel(f"Heliocentric distance [AU]")
+            plt.ylabel(f"Divergence [km]")
+            plt.grid()
+            plt.tight_layout(rect=[0, 0, 1, 0.97])
+            plt.savefig(f"{self.saving_dir}/Clone_divergence/{sim}_Clone_difference.pdf", dpi=300)
+            plt.close() 
+
