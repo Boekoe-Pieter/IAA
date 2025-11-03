@@ -1,3 +1,7 @@
+"""
+Week 8 is dedicated to the orbit fitting of NGA orbits via reference observations of an orbit with NGA's.
+"""
+
 # Tudat imports for propagation and estimation
 from tudatpy.interface import spice
 from tudatpy.dynamics import environment_setup, propagation_setup, environment, propagation, parameters_setup, simulator
@@ -16,6 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import os
 import sys
+import pickle
 
 # python files
 import Helper_file
@@ -24,6 +29,7 @@ from Plotter import estimation_plotter as EstPlot
 from Plotter import statistics_plotter as StatPlot
 
 np.set_printoptions(linewidth=160)
+
 # ----------------------------------------------------------------------
 # Define saving directories
 # ----------------------------------------------------------------------
@@ -52,7 +58,7 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 
 # samples
 Orbit_samples = 1000
-Observation_step_size = 165
+Observation_step_size = 40
 np.random.seed(42)
 
 # number of iterations for our estimation
@@ -71,7 +77,7 @@ global_frame_orientation = "ECLIPJ2000"
 
 # NGA on or off for orbit propagation
 NGA_Flag = True
-
+NGA_Est = True
 # ----------------------------------------------------------------------
 # Define the Environment
 # ----------------------------------------------------------------------
@@ -146,6 +152,7 @@ for body in all_results:
 
         "Estimated_Reference_trajectory":{},
         "Estimated_Reference_trajectory_times":{},
+        "NGA_Est":{},
 
         "Montecarlo_trajectory": {},
         "Montecarlo_trajectory_times": {},
@@ -176,7 +183,7 @@ for body in all_results:
         [A1.value*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2 if A1 is not None else 0,
         A2.value*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2 if A2 is not None else 0,
         A3.value*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2 if A3 is not None else 0,
-        DT.value if DT is not None else 0,]
+        ]
         )
 
     directory_name = f"{rel_dir}/plots_{designator}"
@@ -194,7 +201,7 @@ for body in all_results:
         print(f"Directory '{directory_name}' created successfully.")
     except FileExistsError:
         print(f"Directory '{directory_name}' already exists.")
-    addition = "/NGA_True" if NGA_Flag else "/NGA_False"
+    addition = "/NGA_Est"
     # saving directory for NGA flag
     try:
         os.mkdir(f"{directory_name}{addition}")
@@ -257,7 +264,7 @@ for body in all_results:
         SSE_start,
     )
 
-    acceleration_models = Helper_file.Accelerations(spkid,
+    acceleration_models_reference = Helper_file.Accelerations(spkid,
                                                     bodies, 
                                                     bodies_to_propagate, 
                                                     central_bodies,
@@ -265,16 +272,6 @@ for body in all_results:
                                                     NGA_Flag=NGA_Flag)
 
     print(np.linalg.norm(initial_state_reference[:3])/constants.ASTRONOMICAL_UNIT)
-
-    # SBDB Oscullating Initial
-    # initial_state_reference = Helper_file.initial_state(SSE_start,Oscullating_elements,bodies)
-    
-    # print(np.linalg.norm(initial_state_reference[:3])/constants.ASTRONOMICAL_UNIT)
-
-    # acceleration_models = Helper_file.twoBP(spkid,
-    #                                         bodies, 
-    #                                         bodies_to_propagate, 
-    #                                         central_bodies)
 
     dependent_variables_to_save = [
         propagation_setup.dependent_variable.relative_position(body, "Sun")
@@ -285,7 +282,7 @@ for body in all_results:
     
     propagator_settings = Helper_file.propagator_settings(integrator_settings,
                                                           central_bodies,
-                                                          acceleration_models,
+                                                          acceleration_models_reference,
                                                           bodies_to_propagate,
                                                           initial_state_reference,
                                                           SSE_start,
@@ -337,6 +334,7 @@ for body in all_results:
     print(f"Difference: {np.linalg.norm((comet_pos[-1]-Final_state_spice[:3]/constants.ASTRONOMICAL_UNIT))*constants.ASTRONOMICAL_UNIT/1000}")
     print("--------------------------------------------------------------------"\
           )
+
     # ----------------------------------------------------------------------
     # Define Observatory
     # ----------------------------------------------------------------------
@@ -370,7 +368,7 @@ for body in all_results:
     observation_settings_list = [observable_models_setup.model_settings.angular_position(link_definition)]
 
     # ----------------------------------------------------------------------
-    # Define propagator and integrator settings for estimation
+    # Define propagator and integrator settings for estimation type
     # ----------------------------------------------------------------------
     initial_state_estimation = spice.get_body_cartesian_state_at_epoch(
         str(spkid),
@@ -381,15 +379,100 @@ for body in all_results:
     )
 
     dependent_variables_to_save = []
+    def NGA(time: float) -> np.ndarray:
+        state = bodies.get(str(spkid)).state
+        r_vec = state[:3]
+
+        v_vec = state[3:]
+
+        r_norm = np.linalg.norm(r_vec)
+
+        m = 2.15
+        n = 5.093
+        k = 4.6142
+        r0 = 2.808*constants.ASTRONOMICAL_UNIT
+        alpha = 0.1113
+
+        A_vec = get_custom_parameter()
+
+        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+
+        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+
+        F_vec_rtn = g * A_vec
+        F_vec_inertial = C_rtn2eci @ F_vec_rtn
+
+        return F_vec_inertial  
+
+    def rtn_to_eci(r_vec: np.ndarray, v_vec: np.ndarray) -> np.ndarray:
+        r_hat = r_vec / np.linalg.norm(r_vec)
+        h_vec = np.cross(r_vec, v_vec)
+        h_hat = h_vec / np.linalg.norm(h_vec)
+        t_hat = np.cross(h_hat, r_hat)
+
+        C = np.vstack((r_hat, t_hat, h_hat)).T
+        return C
+
+    accelerations = {
+        "Sun": [
+            propagation_setup.acceleration.point_mass_gravity(),
+            propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True),
+        ],
+
+        "Mercury": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Venus": [propagation_setup.acceleration.point_mass_gravity()],
         
-    acceleration_models = Helper_file.Accelerations(spkid,
-                                                    bodies, 
-                                                    bodies_to_propagate, 
-                                                    central_bodies,
-                                                    NGA_array,
-                                                    NGA_Flag=False)
+        "Earth": [
+            propagation_setup.acceleration.point_mass_gravity(),
+        ],
+        "Moon": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Mars": [propagation_setup.acceleration.point_mass_gravity()],
+        "Phobos": [propagation_setup.acceleration.point_mass_gravity()],
+        "Deimos": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Jupiter": [propagation_setup.acceleration.point_mass_gravity(),
+                    propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True)],
+        "Io": [propagation_setup.acceleration.point_mass_gravity()],
+        "Europa": [propagation_setup.acceleration.point_mass_gravity()],
+        "Ganymede": [propagation_setup.acceleration.point_mass_gravity()],
+        "Callisto": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Saturn": [propagation_setup.acceleration.point_mass_gravity(),
+                propagation_setup.acceleration.relativistic_correction(use_schwarzschild=True)],
+        "Titan": [propagation_setup.acceleration.point_mass_gravity()],
+        "Rhea": [propagation_setup.acceleration.point_mass_gravity()],
+        "Iapetus": [propagation_setup.acceleration.point_mass_gravity()],
+        "Dione": [propagation_setup.acceleration.point_mass_gravity()],
+        "Tethys": [propagation_setup.acceleration.point_mass_gravity()],
+        "Enceladus": [propagation_setup.acceleration.point_mass_gravity()],
+        "Mimas": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Uranus": [propagation_setup.acceleration.point_mass_gravity()],
+        "Miranda": [propagation_setup.acceleration.point_mass_gravity()],
+        "Ariel": [propagation_setup.acceleration.point_mass_gravity()],
+        "Umbriel": [propagation_setup.acceleration.point_mass_gravity()],
+        "Titania": [propagation_setup.acceleration.point_mass_gravity()],
+        "Oberon": [propagation_setup.acceleration.point_mass_gravity()],
+
+        "Neptune": [propagation_setup.acceleration.point_mass_gravity()],
+        "Triton": [propagation_setup.acceleration.point_mass_gravity()],
     
-    propagator_settings_estimator = Helper_file.propagator_settings(integrator_settings,
+        "Ceres": [propagation_setup.acceleration.point_mass_gravity()],
+        "Vesta": [propagation_setup.acceleration.point_mass_gravity()],
+        "Pluto": [propagation_setup.acceleration.point_mass_gravity()],
+
+        str(spkid): [propagation_setup.acceleration.custom_acceleration(NGA)]
+        }
+    acceleration_settings = {str(spkid): accelerations}
+
+    acceleration_models = propagation_setup.create_acceleration_models(
+        bodies, acceleration_settings, bodies_to_propagate, central_bodies
+    )
+    
+    propagator_settings_estimator = Helper_file.propagator_settings(
+                                                          integrator_settings,
                                                           central_bodies,
                                                           acceleration_models,
                                                           bodies_to_propagate,
@@ -399,9 +482,61 @@ for body in all_results:
                                                           dependent_variables_to_save)
     
     # ----------------------------------------------------------------------
-    # Define parameters to estimate
+    # Define estimator for the actual wanted dynamics
     # ----------------------------------------------------------------------
+    def compute_current_custom_parameter_partial(time: float,state: float) -> np.ndarray:
+        state = bodies.get(str(spkid)).state
+        r_vec = state[:3]
+        v_vec = state[3:]
+        r_norm = np.linalg.norm(r_vec)
+
+        m = 2.15
+        n = 5.093
+        k = 4.6142
+        r0 = 2.808*constants.ASTRONOMICAL_UNIT
+        alpha = 0.1113
+
+        g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)
+        C_rtn2eci = rtn_to_eci(r_vec, v_vec)
+
+        current_custom_parameter_partial = g * C_rtn2eci  
+
+        return current_custom_parameter_partial
+    
+    A1,A2,A3 = NGA_array
+    print(NGA_array)
+
+    A1 = 2.195*10**-8*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2
+    A2 = 0.006*10**-8*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2
+    A3 = 0*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2
+    A_vec = np.array([A1,A2,A3])
+    print(A_vec)
+    custom_parameter = A_vec
+
+    def get_custom_parameter():
+        return custom_parameter #Get the parameter values
+
+    def set_custom_parameter(estimated_value):
+        global custom_parameter
+        custom_parameter = np.array(estimated_value)  #Update the guess
+
     parameter_settings = parameters_setup.initial_states(propagator_settings_estimator, bodies)
+    
+    parameter_settings.append(
+        parameters_setup.custom_parameter(
+            'NGA', 3, get_custom_parameter,
+            set_custom_parameter
+        )
+    )
+
+    parameter_settings[-1].custom_partial_settings = [
+        parameters_setup.custom_analytical_partial(
+            compute_current_custom_parameter_partial,
+            str(spkid),
+            str(spkid),
+            propagation_setup.acceleration.AvailableAcceleration.custom_acceleration_type
+        )
+    ]
 
     parameters_to_estimate = parameters_setup.create_parameter_set(
         parameter_settings, bodies, propagator_settings_estimator
@@ -413,7 +548,7 @@ for body in all_results:
         observation_settings_list,
         propagator_settings_estimator,
         integrate_on_creation=True)
-
+    
     # ----------------------------------------------------------------------
     # Define observation campaign
     # ----------------------------------------------------------------------
@@ -429,71 +564,110 @@ for body in all_results:
     #nth observation sim
     sim = 1
     for n_obs in observation_counts:
+        try:
+            print(f"\n"\
+                f"Estimating with {n_obs} observations")
+            # populate the dictionaries
+
+
+            current_times = Full_observation_times[:n_obs]
+            observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
+                observable_models_setup.model_settings.angular_position_type,
+                link_definition,
+                current_times
+            )
+            observation_simulation_settings = [observation_simulation_settings_RADEC] 
+
+            # Add noise levels as Gaussian noise to the observation
+            LSST = 0.1 # arcsec
+            noise_level = (0.1/3600) * np.pi/180  # radians
+            observations_setup.random_noise.add_gaussian_noise_to_observable(
+                [observation_simulation_settings_RADEC],
+                noise_level,
+                observable_models_setup.model_settings.angular_position_type
+            )
+
+            # ----------------------------------------------------------------------
+            # Create Reference Observations
+            # ----------------------------------------------------------------------
+            propagator_settings_truth = Helper_file.propagator_settings(
+                                                                integrator_settings,
+                                                                central_bodies,
+                                                                acceleration_models_reference,
+                                                                bodies_to_propagate,
+                                                                initial_state_estimation,
+                                                                SSE_start_buffer,
+                                                                SSE_end_buffer,
+                                                                dependent_variables_to_save)
+
+            parameter_settings_truth = parameters_setup.initial_states(propagator_settings_truth, bodies)
+            parameters_to_estimate_truth = parameters_setup.create_parameter_set(
+                parameter_settings_truth, bodies, propagator_settings_truth
+            )
+
+            truth_estimator = estimation_analysis.Estimator(
+                bodies,
+                parameters_to_estimate_truth,
+                observation_settings_list,
+                propagator_settings_truth,
+                integrate_on_creation=True
+            )
+
+            simulated_observations = observations_setup.observations_wrapper.simulate_observations(
+                observation_simulation_settings,
+                truth_estimator.observation_simulators,
+                bodies
+                )
+
+            # ----------------------------------------------------------------------
+            # Precise orbit determination
+            # ----------------------------------------------------------------------
+            "Precise orbit determination of the comets trajectory by weighting the observations, we perurb the initial conditions to better see"
+            "the POD can anlayse the dynamical model against the observations."
+
+            # Define weighting of the observations in the inversion
+            weights_per_observable = { observations.observations_processing.observation_parser(
+                observable_models_setup.model_settings.angular_position_type ): noise_level ** -2}
+            
+            simulated_observations.set_constant_weight_per_observation_parser(weights_per_observable)
+
+            truth_parameters = parameters_to_estimate.parameter_vector
+
+            perturbed_parameters = truth_parameters.copy()
+            for i in range(3):
+                perturbed_parameters[i] += 1000000000.0
+                perturbed_parameters[i+3] += 100
+
+            parameters_to_estimate.parameter_vector = perturbed_parameters
+
+            pod_input = estimation_analysis.EstimationInput(
+                observations_and_times=simulated_observations,
+                convergence_checker= estimation_analysis.estimation_convergence_checker(
+                    maximum_iterations=number_of_pod_iterations,
+                ),
+            )
+
+            pod_input.define_estimation_settings(
+                reintegrate_variational_equations=True,
+                save_state_history_per_iteration=True,    
+            )
+            
+            pod_output = estimator.perform_estimation(pod_input)
+        except Exception as e:
+            print("\n")
+            print(f"Estimation failed: {e}")
+            print("Stopping execution.")
+            break
         
-        print(f"\n"\
-              "Estimating with {n_obs} observations")
-        # populate the dictionaries
+        if np.any(np.abs(np.array(custom_parameter)) > 1e-5):
+            print("\n")
+            print(f"A1,A2,A3 is larger than 1e-5, unrealistic value. Stopping simulation.")
+            break 
+
         data_to_write['Montecarlo_trajectory'].setdefault(sim, {})
         data_to_write['Montecarlo_trajectory_times'].setdefault(sim, {})
         data_to_write['observation_times'].setdefault(sim, {})
-
-        current_times = Full_observation_times[:n_obs]
-        observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
-            observable_models_setup.model_settings.angular_position_type,
-            link_definition,
-            current_times
-        )
-        observation_simulation_settings = [observation_simulation_settings_RADEC] 
-
-        # Add noise levels as Gaussian noise to the observation
-        LSST = 0.1 # arcsec
-        noise_level = (0.1/3600) * np.pi/180  # radians
-        observations_setup.random_noise.add_gaussian_noise_to_observable(
-            [observation_simulation_settings_RADEC],
-            noise_level,
-            observable_models_setup.model_settings.angular_position_type
-        )
-
-        # Simulate required observations
-        simulated_observations = observations_setup.observations_wrapper.simulate_observations(
-            observation_simulation_settings,
-            estimator.observation_simulators,
-            bodies)
-
-        # ----------------------------------------------------------------------
-        # Precise orbit determination
-        # ----------------------------------------------------------------------
-        "Precise orbit determination of the comets trajectory by weighting the observations, we perurb the initial conditions to better see"
-        "the POD can anlayse the dynamical model against the observations."
-
-        # Define weighting of the observations in the inversion
-        weights_per_observable = { observations.observations_processing.observation_parser(
-            observable_models_setup.model_settings.angular_position_type ): noise_level ** -2}
-        
-        simulated_observations.set_constant_weight_per_observation_parser(weights_per_observable)
-
-        truth_parameters = parameters_to_estimate.parameter_vector
-
-        perturbed_parameters = truth_parameters.copy()
-        for i in range(3):
-            perturbed_parameters[i] += 100.0
-            perturbed_parameters[i+3] += 10
-
-        parameters_to_estimate.parameter_vector = perturbed_parameters
-
-        pod_input = estimation_analysis.EstimationInput(
-            observations_and_times=simulated_observations,
-            convergence_checker= estimation_analysis.estimation_convergence_checker(
-                maximum_iterations=number_of_pod_iterations,
-            ),
-        )
-
-        pod_input.define_estimation_settings(reintegrate_variational_equations=True)
-
-        pod_output = estimator.perform_estimation(pod_input)
-        
-        residual_history = pod_output.residual_history
-        
+        data_to_write['NGA_Est'].setdefault(sim, {})
         times = np.arange(SSE_start, SSE_end, timestep_global)
         if not np.isclose(times[-1], SSE_end, rtol=1e-10, atol=1e-10):
             times = np.append(times, SSE_end)
@@ -517,7 +691,7 @@ for body in all_results:
         print(np.linalg.norm(np.array(state_est_end)[:3])/constants.ASTRONOMICAL_UNIT)
         print("--------------------------------------------------------------------"\
             )
-  
+
         # ----------------------------------------------------------------------
         # Covariance estimation
         # ----------------------------------------------------------------------
@@ -579,30 +753,41 @@ for body in all_results:
 
             "NBP": bodies_to_create,
         }
-
+        print(custom_parameter)
         with open(f"{directory_name}{addition}/Info_syntheticobs.txt", "w") as f:
             pprint.pprint(info_dict_synobs, stream=f, indent=2, width=80, sort_dicts=False)
-        
+
         # ----------------------------------------------------------------------
         # Perform monte carlo
         # ----------------------------------------------------------------------
         initial_covariance = covariance_output.covariance
         initial_state = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
 
-        trajectory_parameters = initial_state.copy()
+        NGA_Parameters = custom_parameter
+        state_vector = np.concatenate((initial_state,NGA_Parameters))
+
+        trajectory_parameters = state_vector.copy()
         samples = np.random.multivariate_normal(trajectory_parameters, initial_covariance, size=Orbit_samples)
         
         dependent_variables_to_save = []
         subdir = f"{directory_name}/Simulation_{sim}"
         print("--------------------------------------------------------------------")
         print("Performing Monte Carlo")
+
         for i, sampled_conditions in enumerate(samples):
+            acceleration_models_monte = Helper_file.Accelerations(spkid,
+                                                bodies, 
+                                                bodies_to_propagate, 
+                                                central_bodies,
+                                                np.array(sampled_conditions[6:]),
+                                                NGA_Flag=NGA_Flag)
+            
             propagator_settings_sample = Helper_file.propagator_settings(
                                                                 integrator_settings,
                                                                 central_bodies,
-                                                                acceleration_models,
+                                                                acceleration_models_monte,
                                                                 bodies_to_propagate,
-                                                                sampled_conditions,
+                                                                np.array(sampled_conditions[:6]),
                                                                 SSE_start,
                                                                 SSE_end,
                                                                 dependent_variables_to_save)
@@ -615,11 +800,14 @@ for body in all_results:
             data_to_write['Montecarlo_trajectory'][sim][i] = np.vstack(list(state_hist_sample.values()))
             data_to_write['Montecarlo_trajectory_times'][sim][i] = np.vstack(list(state_hist_sample.keys()))
             data_to_write["observation_times"][sim] = current_times
+            data_to_write["NGA_Est"][sim] = NGA_Parameters
+
             data_to_write["Sim_info"][sim] = {
             "Orbit_samples": Orbit_samples,
             "N_obs": n_obs,
             "Integrator": "rkf_56",
-            "Time_step": timestep_global
+            "Time_step": timestep_global,
+            "Body": target_body
             }
 
             progress = (i + 1) / len(samples)
@@ -631,6 +819,11 @@ for body in all_results:
         data_to_write['environment'] = bodies_to_create
 
         sim += 1
+    
+    with open(f"{directory_name}{addition}/Data_NGA_Est.pkl", "wb") as f:
+        pickle.dump(data_to_write, f)
+    with open(f"Coding/W79 Estimation/Sim_data/Data_NGA_Est.pkl", "wb") as f:
+        pickle.dump(data_to_write, f)
 
     stat = StatPlot(data_to_write,info_dict_synobs,directory_name,addition)
     stat.plot_3D()
@@ -638,3 +831,4 @@ for body in all_results:
     stat.fit()
     stat.ref_to_spice()
     stat.clone_divergence()
+

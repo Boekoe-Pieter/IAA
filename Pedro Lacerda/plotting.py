@@ -34,6 +34,11 @@ general_statistics = {
     "Clone_Divergence_Vel_Norm_peri": {},  
     "Clone_Divergence_Norm_AU": {},  
     "Clone_Divergence_Vel_Norm_AU": {},  
+
+    "Clone_Divergence_Norm_peri_obs": {},  
+    "Clone_Divergence_Vel_Norm_peri_obs": {},  
+    "Clone_Divergence_Norm_AU_obs": {},  
+    "Clone_Divergence_Vel_Norm_AU_obs": {},  
 }
 
 obs_scatter = {
@@ -52,7 +57,7 @@ valid_clone_dict = {
 # data
 # comets = ['C2001Q4','C2008A1','C2013US10']
 base_path = "Pedro Lacerda/"
-comet = 'C2013US10'
+comet = 'C2001Q4'
 
 comet_path = os.path.join(base_path, "data_"+comet)
 
@@ -316,6 +321,24 @@ for sim_folder in sorted(os.listdir(comet_path), key=natural_key):
     general_statistics["Clone_Divergence_Norm_AU"][comet][dt_days] = list(Family["Pos_div_1AU"].values())
     general_statistics["Clone_Divergence_Vel_Norm_AU"][comet][dt_days] = list(Family["Vel_div_1AU"].values())
 
+
+    if comet not in general_statistics["Clone_Divergence_Norm_peri_obs"]:
+        general_statistics["Clone_Divergence_Norm_peri_obs"][comet] = {}
+        
+    if comet not in general_statistics["Clone_Divergence_Vel_Norm_peri_obs"]:
+        general_statistics["Clone_Divergence_Vel_Norm_peri_obs"][comet] = {}
+
+    if comet not in general_statistics["Clone_Divergence_Norm_AU_obs"]:
+        general_statistics["Clone_Divergence_Norm_AU_obs"][comet] = {}
+
+    if comet not in general_statistics["Clone_Divergence_Vel_Norm_AU_obs"]:
+        general_statistics["Clone_Divergence_Vel_Norm_AU_obs"][comet] = {}
+
+    general_statistics["Clone_Divergence_Norm_peri_obs"][comet][info['used_obs']] = list(Family["Clone_Divergence_Norm_peri"].values())
+    general_statistics["Clone_Divergence_Vel_Norm_peri_obs"][comet][info['used_obs']] = list(Family["Clone_Divergence_Nor_vel_peri"].values())
+    general_statistics["Clone_Divergence_Norm_AU_obs"][comet][info['used_obs']] = list(Family["Pos_div_1AU"].values())
+    general_statistics["Clone_Divergence_Vel_Norm_AU_obs"][comet][info['used_obs']] = list(Family["Vel_div_1AU"].values())
+
     obs_scatter.setdefault("N_obs", {}).setdefault(comet, []).append(info['used_obs'])
     obs_scatter.setdefault("Date", {}).setdefault(comet, []).append(last_obs_str)
     obs_scatter.setdefault("Helio", {}).setdefault(comet, []).append(r_obs_AU)
@@ -467,9 +490,9 @@ def valid_clones_plot(valid_clone_dict):
 valid_clones_plot(valid_clone_dict)
 
 # ---------------------------------------------------------------------------------------------
+# DT plot
+# ---------------------------------------------------------------------------------------------
 extra_time = 15
-height_pos = 1000
-height_vel = 1
 
 divergence = general_statistics["Clone_Divergence_Norm_peri"][comet]
 dt = sorted(divergence.keys(), reverse=True)
@@ -495,21 +518,6 @@ for patch in box["boxes"]:
 time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 plt.xticks(time,rotation=70)
-width = -60 
-
-x_start = 60      
-y_start = 0
-# square = patches.Rectangle(
-#     (x_start, y_start),   
-#     width,                 
-#     height_pos,                
-#     linewidth=1,
-#     edgecolor='black',
-#     facecolor='green',
-#     alpha=0.3             
-# )
-# ax.add_patch(square)
-
 plt.gca().invert_xaxis()
 plt.yscale("log")
 plt.ylabel("Clone Position Divergence Norm at perihelion [km]")
@@ -547,21 +555,6 @@ for patch in box["boxes"]:
 time = np.arange(max(dt),min(dt)-extra_time,-extra_time)
 
 plt.xticks(time,rotation=70)
-width = -60
-
-x_start = 60      
-y_start = 0
-# square = patches.Rectangle(
-#     (x_start, y_start),   
-#     width,                 
-#     height_vel,                
-#     linewidth=1,
-#     edgecolor='black',
-#     facecolor='green',
-#     alpha=0.3             
-# )
-# ax.add_patch(square)
-
 plt.gca().invert_xaxis()
 
 plt.yscale("log")
@@ -607,7 +600,6 @@ plt.title(f"Clone Velocity Divergence vs. Days to 1.2 AU {comet}\n{info['N_clone
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.savefig(f'{base_path}/{comet}_boxplot_POS_AU.pdf',dpi=300)
-# plt.show()
 
 # ---------------------------------------------------------------------------------------------
 
@@ -645,6 +637,147 @@ plt.title(f"Clone Velocity Divergence vs. Days to 1.2 AU {comet}\n{info['N_clone
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.savefig(f'{base_path}/{comet}_boxplot_VEL_AU.pdf',dpi=300)
+# plt.show()
+
+# ---------------------------------------------------------------------------------------------
+# N obs plot
+# ---------------------------------------------------------------------------------------------
+divergence = general_statistics["Clone_Divergence_Norm_peri_obs"][comet]
+dt = sorted(divergence.keys(), reverse=True)
+
+dt = np.array(dt, dtype=float)
+
+data = [np.array(divergence[n]) / 1e3 for n in dt]
+
+fig, ax = plt.subplots(figsize=(15, 8))
+
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=1, 
+    patch_artist=True,
+    manage_ticks=False
+)
+
+for patch in box["boxes"]:
+    patch.set_facecolor("tab:blue")
+    patch.set_alpha(0.6)
+
+plt.xticks(rotation=70)
+# plt.gca().invert_xaxis()
+plt.yscale("log")
+plt.ylabel("Clone Position Divergence Norm at perihelion [km]")
+plt.xlabel("Number of observations")
+plt.title(
+    f"Clone Position Divergence vs. Number of observations {comet}\n"
+    f"{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
+)
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(f"{base_path}/{comet}_boxplot_POS_Peri_OBS.pdf", dpi=300)
+# plt.show()
+
+# ---------------------------------------------------------------------------------------------
+divergence = general_statistics["Clone_Divergence_Vel_Norm_peri_obs"][comet]
+dt = sorted(divergence.keys(), reverse=True)
+
+data = [np.array(divergence[n]) for n in dt]
+positions = np.arange(len(dt)) * 2
+
+fig, ax = plt.subplots(figsize=(15, 8))
+
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=1, 
+    patch_artist=True,
+    manage_ticks=False
+)
+
+for patch in box["boxes"]:
+    patch.set_facecolor("tab:blue")
+    patch.set_alpha(0.6)
+
+plt.xticks(rotation=70)
+# plt.gca().invert_xaxis()
+
+plt.yscale("log")
+plt.ylabel("Clone Velocity Divergence Norm at perihelion [m/s]")
+plt.xlabel("Number of observations")
+plt.title(f"Clone Velocity Divergence vs. Days to Perihelion {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(f'{base_path}/{comet}_boxplot_VEL_Peri_OBS.pdf',dpi=300)
+# plt.show()
+# ---------------------------------------------------------------------------------------------
+
+divergence = general_statistics["Clone_Divergence_Norm_AU_obs"][comet]
+dt = sorted(divergence.keys(), reverse=True)
+
+data = [np.array(divergence[n])/1000 for n in dt]
+positions = np.arange(len(dt)) * 2
+
+fig, ax = plt.subplots(figsize=(15, 8))
+
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=1, 
+    patch_artist=True,
+    manage_ticks=False
+)
+
+for patch in box["boxes"]:
+    patch.set_facecolor("tab:blue")
+    patch.set_alpha(0.6)
+
+plt.xticks(rotation=70)
+
+# plt.gca().invert_xaxis()
+
+plt.yscale("log")
+plt.ylabel("Clone Position Divergence Norm at 1.2 AU [km]")
+plt.xlabel("Number of observations")
+plt.title(f"Clone Velocity Divergence vs. Number of observations {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(f'{base_path}/{comet}_boxplot_POS_AU_OBS.pdf',dpi=300)
+# plt.show()
+
+# ---------------------------------------------------------------------------------------------
+
+divergence = general_statistics["Clone_Divergence_Vel_Norm_AU_obs"][comet]
+dt = sorted(divergence.keys(), reverse=True)
+
+data = [np.array(divergence[n]) for n in dt]
+positions = np.arange(len(dt)) * 2
+
+fig, ax = plt.subplots(figsize=(15, 8))
+
+box = plt.boxplot(
+    data,
+    positions=dt,          
+    widths=1, 
+    patch_artist=True,
+    manage_ticks=False
+)
+
+for patch in box["boxes"]:
+    patch.set_facecolor("tab:blue")
+    patch.set_alpha(0.6)
+
+plt.xticks(rotation=70)
+width = time[-1]-60 if time[-1]<0 else -60
+
+# plt.gca().invert_xaxis()
+
+plt.yscale("log")
+plt.ylabel("Clone Velocity Divergence Norm at 1.2 AU [m/s]")
+plt.xlabel("Number of observations")
+plt.title(f"Clone Velocity Divergence vs. Number of observations {comet}\n{info['N_clones']} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.savefig(f'{base_path}/{comet}_boxplot_VEL_AU_OBS.pdf',dpi=300)
 # plt.show()
 
 dates_str = obs_scatter["Date"][comet]

@@ -110,7 +110,7 @@ def Accelerations(spkid,bodies, bodies_to_propagate, central_bodies,NGA_array,NG
         r0 = 2.808*constants.ASTRONOMICAL_UNIT
         alpha = 0.1113
 
-        A1,A2,A3,DT = NGA_array
+        A1,A2,A3 = NGA_array
         A_vec = np.array([A1,A2,A3])
 
         g = alpha * (r_norm / r0) ** (-m) * (1 + (r_norm / r0) ** n) ** (-k)

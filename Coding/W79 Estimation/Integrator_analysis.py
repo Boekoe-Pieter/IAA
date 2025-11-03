@@ -324,6 +324,7 @@ Final_state_spice = spice.get_body_cartesian_state_at_epoch(
     "NONE",
     SSE_end,
 )
+
 print(f"Spice final state: {np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT}")
 print(f"Difference: {np.linalg.norm((comet_pos[-1]-Final_state_spice[:3]/constants.ASTRONOMICAL_UNIT))*constants.ASTRONOMICAL_UNIT/1000}")
 print("--------------------------------------------------------------------"\

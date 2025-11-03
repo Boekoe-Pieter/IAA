@@ -190,8 +190,9 @@ class estimation_plotter:
         # ----------------------------------------------------------------------
         # correlation plot
         corr_matrix = self.covariance_output.correlations
+        formal_errors = self.covariance_output.formal_errors
 
-        covar_names = ["x", 'y', 'z', 'vx', 'vy', 'vz']
+        covar_names = ["x", 'y', 'z', 'vx', 'vy', 'vz'] if len(formal_errors)<=6 else ["x", 'y', 'z', 'vx', 'vy', 'vz', "A1", "A2", "A3"]
 
         fig, ax = plt.subplots(figsize=(9, 7))
         im = ax.imshow(corr_matrix, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
@@ -576,27 +577,12 @@ class statistics_plotter:
                 time = np.arange(max(dt), min(dt) - extra_time, -extra_time)
                 plt.xticks(time, rotation=70)
                 plt.gca().invert_xaxis()
-
-                # width = -60
-                # x_start = 60
-                # y_start = 0
-                # square = patches.Rectangle(
-                #     (x_start, y_start),
-                #     width,
-                #     height,
-                #     linewidth=1,
-                #     edgecolor='black',
-                #     facecolor='green',
-                #     alpha=0.3
-                # )
-                # ax.add_patch(square)
-
+            
             plt.yscale("log")
             plt.ylabel(ylabel)
             plt.xlabel(xlabel)
             plt.title(
                 f"{title} {comet}\n"
-                # f"{data['Sim_info'][sim]} clones, Integrator: {info['Integrator']}, timestep: {info['timestep']} sec"
             )
             plt.grid(axis="y", linestyle="--", alpha=0.7)
             plt.tight_layout()
