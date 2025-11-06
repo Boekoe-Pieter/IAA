@@ -15,6 +15,7 @@ import numpy as np
 import random
 import pprint
 import math
+import pickle
 
 # other libraries
 import matplotlib.pyplot as plt
@@ -56,14 +57,18 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # Define iterations, timesteps and frames
 # ----------------------------------------------------------------------
 
-# samples
-Orbit_samples = 1000
+# changables
 Observation_step_size = 165 #days
-arclength = -0.25   #AU
+
+rh = 3.0           #AU, start arc
+arclength = -0.5   #AU
+rh_stop = 1.0
+
+Orbit_samples = 100
 np.random.seed(42)
 
 # number of iterations for our estimation
-number_of_pod_iterations = 6
+number_of_pod_iterations = 8
 
 # timestep of 1 hours for our estimation
 timestep_global = 24*3600
@@ -138,7 +143,7 @@ body_settings = environment_setup.get_default_body_settings(
 
 # SBDB_request = Helper_file.sbdb_query(classes,request_filter)
 
-all_results = ["C2001Q4"] #,"C2008A1","C2013US10"]
+all_results = ["C2001Q4"] #"C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     # saving dictionary
@@ -206,6 +211,26 @@ for body in all_results:
         print(f"Directory '{directory_name}{addition}' created successfully.")
     except FileExistsError:
         print(f"Directory '{directory_name}{addition}' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Observation")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Observation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Estimation")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Fit_to_Truth")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Clone_divergence")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
 
     # ----------------------------------------------------------------------
     # Convert calander dates and JD to Epochs
@@ -294,6 +319,9 @@ for body in all_results:
     Reference_orbit_results = Reference_orbit_simulator.propagation_results.state_history
     Reference_orbit_dependent = Reference_orbit_simulator.propagation_results.dependent_variable_history
 
+    Reference_orbit_results = Reference_orbit_simulator.propagation_results.state_history
+    Reference_orbit_dependent = Reference_orbit_simulator.propagation_results.dependent_variable_history
+
     data_to_write["Truth_Reference_trajectory"] = np.vstack(np.array(list(Reference_orbit_results.values())))
     data_to_write["Truth_Reference_trajectory_times"] = np.vstack(np.array(list(Reference_orbit_results.keys())))
 
@@ -314,25 +342,6 @@ for body in all_results:
         start = i * 3
         end = start + 3
         data_to_write["N_body_trajectories"][disturber] = Trajectory_info[:, start:end]
-
-    comet_states = np.vstack(list(Reference_orbit_results.values()))
-    comet_pos = comet_states[:, :3]/constants.ASTRONOMICAL_UNIT
-
-    print("--------------------------------------------------------------------")
-    print(f"propagated final state: {min(np.linalg.norm(comet_pos,axis=1))}")
-    
-    Final_state_spice = spice.get_body_cartesian_state_at_epoch(
-        str(spkid),
-        global_frame_origin,
-        global_frame_orientation,
-        "NONE",
-        SSE_end,
-    )
-
-    print(f"Spice final state: {np.linalg.norm(np.array(Final_state_spice)[:3])/constants.ASTRONOMICAL_UNIT}")
-    print(f"Difference: {np.linalg.norm((comet_pos[-1]-Final_state_spice[:3]/constants.ASTRONOMICAL_UNIT))*constants.ASTRONOMICAL_UNIT/1000}")
-    print("--------------------------------------------------------------------"\
-          )
 
     # ----------------------------------------------------------------------
     # Define Observatory
@@ -367,52 +376,6 @@ for body in all_results:
     observation_settings_list = [observable_models_setup.model_settings.angular_position(link_definition)]
 
     # ----------------------------------------------------------------------
-    # Define propagator and integrator settings for estimation type
-    # ----------------------------------------------------------------------
-    initial_state_estimation = spice.get_body_cartesian_state_at_epoch(
-        str(spkid),
-        global_frame_origin,
-        global_frame_orientation,
-        "NONE",
-        SSE_start_buffer,
-    )
-
-    dependent_variables_to_save = []
-        
-    acceleration_models = Helper_file.Accelerations(spkid,
-                                                    bodies, 
-                                                    bodies_to_propagate, 
-                                                    central_bodies,
-                                                    NGA_array,
-                                                    NGA_Flag=False)
-    
-    propagator_settings_estimator = Helper_file.propagator_settings(
-                                                          integrator_settings,
-                                                          central_bodies,
-                                                          acceleration_models,
-                                                          bodies_to_propagate,
-                                                          initial_state_estimation,
-                                                          SSE_start_buffer,
-                                                          SSE_end_buffer,
-                                                          dependent_variables_to_save)
-    
-    # ----------------------------------------------------------------------
-    # Define estimator for estimation type
-    # ----------------------------------------------------------------------
-    parameter_settings = parameters_setup.initial_states(propagator_settings_estimator, bodies)
-
-    parameters_to_estimate = parameters_setup.create_parameter_set(
-        parameter_settings, bodies, propagator_settings_estimator
-    )
-
-    estimator = estimation_analysis.Estimator(
-        bodies,
-        parameters_to_estimate,
-        observation_settings_list,
-        propagator_settings_estimator,
-        integrate_on_creation=True)
-
-    # ----------------------------------------------------------------------
     # Define arcs 
     # ----------------------------------------------------------------------
 
@@ -421,49 +384,101 @@ for body in all_results:
     Times = np.array(list(Reference_orbit_results.keys()))
 
     # define arcs
-    rh = 2.0 #AU
-    rmin = np.linalg.norm(States[-1,:3])/constants.ASTRONOMICAL_UNIT            #AU
-    arcs = np.arange(rh,rmin,arclength)
+    arcs = np.arange(rh,rh_stop,arclength)
 
-    # Find arc indexes
+    # Find arc times
     States_AU = np.linalg.norm(States[:,:3],axis=1)/constants.ASTRONOMICAL_UNIT #AU
-    mask = States_AU <= rh
-    print(mask)
-    if np.any(mask):
-        idx_AU = np.argmax(mask)
-        if idx_AU > 0:
-            x0, x1 = Times[idx_AU - 1], Times[idx_AU]
-            y0_pos = Times[idx_AU - 1]
-            y1_pos = Times[idx_AU]
-            frac = (rh - x0) / (x1 - x0)
-            pos_AU = y0_pos + frac * (y1_pos - y0_pos)
-        print(pos_AU)
-    break
+    arc_start_list = np.zeros((len(arcs),1))
+    for i, dis in enumerate(arcs):
+        mask = States_AU <= dis
+        idx = np.argmax(mask)
+        Start_arc_time = Times[idx]
+        arc_start_list[i] = Start_arc_time
+
+    arc_start_list = arc_start_list.flatten()
+
+    pairs = np.array([[arc_start_list[i], arc_start_list[i+1]] 
+                        for i in range(len(arc_start_list)-1)])
+
+    Start_time_first_arc = arc_start_list[0]
 
     # ----------------------------------------------------------------------
-    # Define observation campaign
-    # ----------------------------------------------------------------------
-
-    Full_observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
-    max_observations = len(Full_observation_times)
-    observation_counts = list(range(max_observations, 0, -Observation_step_size))
-
-    # ----------------------------------------------------------------------
-    # Perform Estimation for each observation campaign
+    # Perform Estimation for each observation arc
     # ----------------------------------------------------------------------
 
     #nth observation sim, here sim is the nth arc
     sim = 1
-    for n_obs in observation_counts:
-        
+    for arc in pairs:
+        # ----------------------------------------------------------------------
+        # Define observation campaign
+        # ----------------------------------------------------------------------
+        print(arc)
+        start_arc_time = arc[0]
+        end_arc_time = arc[1]
+
+        start_arc_time_buffer = start_arc_time - time_buffer
+        end_arc_time_buffer = end_arc_time + time_buffer
+
+        current_times = np.arange(start_arc_time,end_arc_time,constants.JULIAN_DAY)
+        n_obs = len(current_times)
+
         print(f"\n"\
               f"Estimating with {n_obs} observations")
+        
         # populate the dictionaries
         data_to_write['Montecarlo_trajectory'].setdefault(sim, {})
         data_to_write['Montecarlo_trajectory_times'].setdefault(sim, {})
         data_to_write['observation_times'].setdefault(sim, {})
 
-        current_times = Full_observation_times[:n_obs]
+        # ----------------------------------------------------------------------
+        # Define propagator and integrator settings for estimation type
+        # ----------------------------------------------------------------------
+        initial_state_estimation = spice.get_body_cartesian_state_at_epoch(
+            str(spkid),
+            global_frame_origin,
+            global_frame_orientation,
+            "NONE",
+            start_arc_time_buffer,
+        )
+
+        dependent_variables_to_save = []
+            
+        acceleration_models = Helper_file.Accelerations(spkid,
+                                                        bodies, 
+                                                        bodies_to_propagate, 
+                                                        central_bodies,
+                                                        NGA_array,
+                                                        NGA_Flag=False)
+        
+        propagator_settings_estimator = Helper_file.propagator_settings(
+                                                            integrator_settings,
+                                                            central_bodies,
+                                                            acceleration_models,
+                                                            bodies_to_propagate,
+                                                            initial_state_estimation,
+                                                            start_arc_time_buffer,
+                                                            end_arc_time_buffer,
+                                                            dependent_variables_to_save)
+        
+        # ----------------------------------------------------------------------
+        # Define estimator for estimation type
+        # ----------------------------------------------------------------------
+        parameter_settings = parameters_setup.initial_states(propagator_settings_estimator, bodies)
+
+        parameters_to_estimate = parameters_setup.create_parameter_set(
+            parameter_settings, bodies, propagator_settings_estimator
+        )
+
+        estimator = estimation_analysis.Estimator(
+            bodies,
+            parameters_to_estimate,
+            observation_settings_list,
+            propagator_settings_estimator,
+            integrate_on_creation=True)
+
+        # ----------------------------------------------------------------------
+        # Define observer noise
+        # ----------------------------------------------------------------------
         observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
             observable_models_setup.model_settings.angular_position_type,
             link_definition,
@@ -480,12 +495,6 @@ for body in all_results:
             observable_models_setup.model_settings.angular_position_type
         )
 
-        # Simulate required observations
-        # simulated_observations = observations_setup.observations_wrapper.simulate_observations(
-        #     observation_simulation_settings,
-        #     estimator.observation_simulators,
-        #     bodies)
-
         # ----------------------------------------------------------------------
         # Create Reference Observations
         # ----------------------------------------------------------------------
@@ -495,8 +504,8 @@ for body in all_results:
                                                             acceleration_models_reference,
                                                             bodies_to_propagate,
                                                             initial_state_estimation,
-                                                            SSE_start_buffer,
-                                                            SSE_end_buffer,
+                                                            start_arc_time_buffer,
+                                                            end_arc_time_buffer,
                                                             dependent_variables_to_save)
 
         parameter_settings_truth = parameters_setup.initial_states(propagator_settings_truth, bodies)
@@ -550,9 +559,9 @@ for body in all_results:
 
         pod_output = estimator.perform_estimation(pod_input)
                 
-        times = np.arange(SSE_start, SSE_end, timestep_global)
-        if not np.isclose(times[-1], SSE_end, rtol=1e-10, atol=1e-10):
-            times = np.append(times, SSE_end)
+        times = np.arange(start_arc_time, end_arc_time, timestep_global)
+        if not np.isclose(times[-1], end_arc_time, rtol=1e-10, atol=1e-10):
+            times = np.append(times, end_arc_time)
 
         ephemeris_estimated = np.zeros((len(times), 6))
         for i, time in enumerate(times):
@@ -562,12 +571,12 @@ for body in all_results:
         data_to_write["Estimated_Reference_trajectory_times"][sim] = np.vstack(times)
 
         print("--------------------------------------------------------------------")
-        state_est_start = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
+        state_est_start = bodies.get(str(spkid)).ephemeris.cartesian_state(start_arc_time)
         print("Estimated start state m & m/s and norm in AU")
         print(np.array(state_est_start))
         print(np.linalg.norm(np.array(state_est_start)[:3])/constants.ASTRONOMICAL_UNIT)
 
-        state_est_end = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_end)
+        state_est_end = bodies.get(str(spkid)).ephemeris.cartesian_state(end_arc_time)
         print("Estimated final state m & m/s and norm in AU")
         print(np.array(state_est_end))
         print(np.linalg.norm(np.array(state_est_end)[:3])/constants.ASTRONOMICAL_UNIT)
@@ -602,6 +611,7 @@ for body in all_results:
         est = EstPlot(sim,name, number_of_pod_iterations, pod_output,
                     simulated_observations, covariance_output,
                     parameters_to_estimate, directory_name, addition)
+        
         est.correlation()
         est.residuals(simulated_observations)
         est.formal_erros()
@@ -637,7 +647,7 @@ for body in all_results:
         # Perform monte carlo
         # ----------------------------------------------------------------------
         initial_covariance = covariance_output.covariance
-        initial_state = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
+        initial_state = bodies.get(str(spkid)).ephemeris.cartesian_state(arc[0])
 
         trajectory_parameters = initial_state.copy()
         samples = np.random.multivariate_normal(trajectory_parameters, initial_covariance, size=Orbit_samples)
@@ -653,7 +663,7 @@ for body in all_results:
                                                                 acceleration_models,
                                                                 bodies_to_propagate,
                                                                 sampled_conditions,
-                                                                SSE_start,
+                                                                arc[0],
                                                                 SSE_end,
                                                                 dependent_variables_to_save)
 
@@ -682,9 +692,11 @@ for body in all_results:
 
         sim += 1
     
-    with open(f"{directory_name}{addition}/Data_{arc}.pkl", "w") as f:
-        pprint.pprint(data_to_write, stream=f, indent=2, width=80)
-
+    with open(f"{directory_name}{addition}/Data_arcwise.pkl", "wb") as f:
+        pickle.dump(data_to_write, f)
+    with open(f"Coding/W79 Estimation/Sim_data/Data_arcwise_{body}.pkl", "wb") as f:
+        pickle.dump(data_to_write, f)
+        
     stat = StatPlot(data_to_write,info_dict_synobs,directory_name,addition)
     stat.plot_3D()
     stat.boxplot()

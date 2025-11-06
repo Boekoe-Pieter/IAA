@@ -391,33 +391,43 @@ class statistics_plotter:
                 self.general_statistics["Clone_Divergence_Vel_Norm_peri_NOBS"][comet] = {}
 
             monte_sample = data['Montecarlo_trajectory']
-            Truth_trajectory = data['Truth_Reference_trajectory']
-            Truth_pos_norm = np.linalg.norm(Truth_trajectory[:, 0:3], axis=1)
-            family_dict["Truth_norm"] = Truth_pos_norm
 
             for sim, sim_data in monte_sample.items():
                 for key, traj in sim_data.items():
-                    pos = traj[:, 0:3]
-                    vel = traj[:, 3:]
+                    Monte_Carlo_times = data['Montecarlo_trajectory_times'][sim][key]
+                    Truth_trajectory_times = data['Truth_Reference_trajectory_times']
+                    Truth_trajectory = np.array(data['Truth_Reference_trajectory'])
+                    Truth_pos_norm = np.linalg.norm(Truth_trajectory[:, 0:3], axis=1)
+
+                    mask = np.isin(Truth_trajectory_times, Monte_Carlo_times)
+                    mask = np.squeeze(mask)
+
+                    Truth_trajectory_filtered = Truth_trajectory[mask]
+                    Truth_pos_norm_filtered = Truth_pos_norm[mask]
+
+                    family_dict["Truth_norm"] = Truth_pos_norm_filtered
+
+                    Monte_carlo_pos = traj[:, 0:3]
+                    Monte_carlo_vel = traj[:, 3:]
 
                     # ----------------------------------------------------------------------
                     # Compute divergence
-                    family_dict["Clone_norm"].setdefault(sim, {})[key] = np.linalg.norm(pos, axis=1)
-                    family_dict["Clone_vel_norm"].setdefault(sim, {})[key] = np.linalg.norm(vel, axis=1)
+                    family_dict["Clone_norm"].setdefault(sim, {})[key] = np.linalg.norm(Monte_carlo_pos, axis=1)
+                    family_dict["Clone_vel_norm"].setdefault(sim, {})[key] = np.linalg.norm(Monte_carlo_vel, axis=1)
 
-                    family_dict["Clone_Divergence"].setdefault(sim, {})[key] = pos - Truth_trajectory[:, 0:3]
+                    family_dict["Clone_Divergence"].setdefault(sim, {})[key] = Monte_carlo_pos -  Truth_trajectory_filtered[:, 0:3]
                     family_dict["Clone_Divergence_Norm"].setdefault(sim, {})[key] = np.linalg.norm(
                         family_dict["Clone_Divergence"][sim][key], axis=1
                     )
 
-                    family_dict["Clone_divergence_vel"].setdefault(sim, {})[key] = vel - Truth_trajectory[:, 3:]
+                    family_dict["Clone_divergence_vel"].setdefault(sim, {})[key] = Monte_carlo_vel -  Truth_trajectory_filtered[:, 3:]
                     family_dict["Clone_divergence_vel_norm"].setdefault(sim, {})[key] = np.linalg.norm(
                         family_dict["Clone_divergence_vel"][sim][key], axis=1
                     )
 
                     # ----------------------------------------------------------------------
                     # Find perihelion divergence
-                    idx_peri = np.argmin(Truth_pos_norm)
+                    idx_peri = np.argmin(Truth_pos_norm_filtered)
 
                     family_dict["Clone_Divergence_Norm_peri"].setdefault(sim, {})[key] = \
                         family_dict["Clone_Divergence_Norm"][sim][key][idx_peri]
@@ -426,7 +436,7 @@ class statistics_plotter:
                     
                     # ----------------------------------------------------------------------
                     # timeline
-                    perihelion = self.data["Truth_Reference_trajectory_times"][-1]
+                    perihelion = Truth_trajectory_times[-1]
                     last_obs = self.data["observation_times"][sim][-1]
 
                     N_obs = self.data["Sim_info"][sim].get("N_obs")
@@ -465,7 +475,7 @@ class statistics_plotter:
             ax.scatter(cartesian[-1, 0]/AU, cartesian[-1, 1]/AU, cartesian[-1, 2]/AU, marker="x", s=10, color=color)
             return ax
 
-        def plot_ensemble(data,montecarlo, fit, info, n_clones=20):   
+        def plot_ensemble(data,montecarlo, fit, info, N_fit, n_clones=20):   
             perturbing_bodies = data["environment"][1:]
 
             planets = ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"]
@@ -491,7 +501,7 @@ class statistics_plotter:
                         alpha=0.35, color="gray", lw=0.8)
 
             D_traject(np.array(data["Truth_Reference_trajectory"]), ax=ax,
-                    label='JPL SBDB fitted orbit', color="black", linestyle="-", alpha=0.9, lw=1.8)
+                    label='JPL SBDB fitted orbit', color="black", linestyle="-.", alpha=0.9, lw=1.8)
             D_traject(np.array(fit), ax=ax,
                     label='TUDAT fitted orbit', color="red", linestyle=":", alpha=0.9, lw=1.8)
 
@@ -539,8 +549,8 @@ class statistics_plotter:
             ax.add_artist(leg3)
 
             plt.title(f"{n_clones} Monte Carlo samples of comet {info['Name']} — {info['Observations']} observations")
-            plt.savefig(f"{self.saving_dir}/3D_trajectory_worstfit.pdf", dpi=300)
-            plt.close() 
+            plt.savefig(f"{self.saving_dir}/3D_trajectory_worstfit_{N_fit}.pdf", dpi=300)
+            plt.show() 
 
         keys = list(self.data["Estimated_Reference_trajectory"].keys())
         best_key = keys[0]
@@ -548,8 +558,8 @@ class statistics_plotter:
 
         best_fit = self.data["Estimated_Reference_trajectory"][best_key]
         worst_fit = self.data["Estimated_Reference_trajectory"][worst_key]
-
-        plot_ensemble(self.data,self.data["Montecarlo_trajectory"][worst_key],worst_fit,self.info, n_clones=self.info['Orbit_clones'])
+        for key in keys:
+            plot_ensemble(self.data,self.data["Montecarlo_trajectory"][key],self.data["Estimated_Reference_trajectory"][key],self.info,key, n_clones=self.info['Orbit_clones'])
 
     def boxplot(self, extra_time=15):
         comet = self.info["Name"]
@@ -635,17 +645,28 @@ class statistics_plotter:
             save_name=f"{self.saving_dir}/Stat_Velocity_boxplot_NOBS"
         )
     
-    def fit(self):        
-        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+    def fit(self):    
         Fit_trajectory = self.data["Estimated_Reference_trajectory"]
-        Times = (
-            np.array(self.data["Truth_Reference_trajectory_times"]) / (86400 * 365.25) + 2000
-        )
+        Fit_trajectory_times = self.data["Estimated_Reference_trajectory_times"]
+
+        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+        Truth_trajectory_times = self.data["Truth_Reference_trajectory_times"]
+
+
         for sim, traj in Fit_trajectory.items():
+            mask = np.isin(Truth_trajectory_times, Fit_trajectory_times[sim])
+            mask = np.squeeze(mask)
+
+            Times = (
+                np.array(self.data["Estimated_Reference_trajectory_times"][sim]) / (86400 * 365.25) + 2000
+            )
             Fit_pos = np.array(traj)[:, 0:3]
             Truth_pos = np.array(Truth_trajectory)[:, 0:3]
 
-            diff_elements = Fit_pos - Truth_pos
+
+            Truth_pos_filtered = Truth_pos[mask]
+
+            diff_elements = Fit_pos - Truth_pos_filtered
         
             diff = np.linalg.norm(diff_elements[:,:3],axis=1)
             fig, axs = plt.subplots(4, 1, figsize=(10, 8))
@@ -658,7 +679,7 @@ class statistics_plotter:
 
             axs[2].set_xlabel('Time [Calender]')
 
-            distance_sorted = sorted(np.linalg.norm(Truth_trajectory,axis=1) / AU, reverse=True)
+            distance_sorted = sorted(np.linalg.norm(Truth_pos_filtered,axis=1) / AU, reverse=True)
             axs[3].plot(distance_sorted, diff / 1e3, color='tab:orange')
             axs[3].set_ylabel(r'$||r_{diff}||$ (km)')
             axs[3].grid(True)
@@ -706,28 +727,42 @@ class statistics_plotter:
         plt.close() 
     
     def clone_divergence(self):
-        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+
+
         Fit_trajectory = self.data["Estimated_Reference_trajectory"]
+        Fit_trajectory_times = self.data["Estimated_Reference_trajectory_times"]
+
+        Truth_trajectory = self.data["Truth_Reference_trajectory"]
+        Truth_trajectory_times = self.data["Truth_Reference_trajectory_times"]
+
         Clone_trajectory = self.data["Montecarlo_trajectory"]
 
         Truth_pos = np.array(Truth_trajectory)[:, 0:3]
-
-
         Truth_norm = np.linalg.norm(Truth_pos,axis=1)
+
+
         for sim, sim_data in Clone_trajectory.items():
 
             fig, axs = plt.subplots(1, 1, figsize=(10, 8))
             fig.suptitle(f'Difference of the Fit and clones to the Truth orbit')
             for key, traj in sim_data.items():
+                Monte_Carlo_times = self.data['Montecarlo_trajectory_times'][sim][key]
 
-                diff_norm = np.linalg.norm(Truth_pos-Clone_trajectory[sim][key][:, 0:3],axis=1)
+                mask = np.isin(Truth_trajectory_times, Monte_Carlo_times)
+                mask = np.squeeze(mask)
 
-                axs.plot(Truth_norm/AU,diff_norm/1000)
+                valid_truth = Truth_pos[mask]
+                Valid_Truth_norm = Truth_norm[mask]
+                diff_norm = np.linalg.norm(valid_truth-traj[:, 0:3],axis=1)
 
+                axs.plot(Valid_Truth_norm/AU,diff_norm/1000)
+            
+            mask = np.isin(Truth_trajectory_times, Fit_trajectory_times[sim])
+            mask = np.squeeze(mask)
             Fit = np.array(Fit_trajectory[sim])[:, 0:3]
-            diff_truth_to_fit = Truth_pos - Fit
+            diff_truth_to_fit = Truth_pos[mask] - Fit
             FIT_TRUTH_Dif = np.linalg.norm(diff_truth_to_fit, axis=1) 
-            axs.plot(Truth_norm/AU,FIT_TRUTH_Dif/1000,label='Fitted orbit',color="black",linewidth=3.0)
+            axs.plot(Truth_norm[mask]/AU,FIT_TRUTH_Dif/1000,label='Fitted orbit',color="black",linewidth=3.0)
             axs.invert_xaxis()
             plt.legend()
             plt.xlabel(f"Heliocentric distance [AU]")

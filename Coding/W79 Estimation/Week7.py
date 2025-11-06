@@ -57,12 +57,12 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # ----------------------------------------------------------------------
 
 # samples
-Orbit_samples = 1000
-Observation_step_size = 165
+Orbit_samples = 5
+Observation_step_size = 20
 np.random.seed(42)
 
 # number of iterations for our estimation
-number_of_pod_iterations = 6
+number_of_pod_iterations = 8
 
 # timestep of 1 hours for our estimation
 timestep_global = 24*3600
@@ -76,7 +76,7 @@ global_frame_origin = "Sun"
 global_frame_orientation = "ECLIPJ2000"
 
 # NGA on or off for orbit propagation
-NGA_Flag = False
+NGA_Flag = True
 
 # ----------------------------------------------------------------------
 # Define the Environment
@@ -138,7 +138,7 @@ body_settings = environment_setup.get_default_body_settings(
 
 # SBDB_request = Helper_file.sbdb_query(classes,request_filter)
 
-all_results = ["C2001Q4"] #,"C2008A1","C2013US10"]
+all_results = ["C2001Q4"] #"C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     # saving dictionary
@@ -207,7 +207,26 @@ for body in all_results:
         print(f"Directory '{directory_name}{addition}' created successfully.")
     except FileExistsError:
         print(f"Directory '{directory_name}{addition}' already exists.")
-
+    try:
+        os.mkdir(f"{directory_name}{addition}/Observation")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Observation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Estimation")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Fit_to_Truth")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Clone_divergence")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
     # ----------------------------------------------------------------------
     # Convert calander dates and JD to Epochs
     # ----------------------------------------------------------------------
@@ -415,10 +434,28 @@ for body in all_results:
     # ----------------------------------------------------------------------
     # Define observation campaign
     # ----------------------------------------------------------------------
+    "We want a limited version, from 3 AU until peri so we keep simulating until we reach the mimimum observations at 3AU"
+    rh = 3
+    # Reference orbit
+    States = np.array(list(Reference_orbit_results.values()))
+    Times = np.array(list(Reference_orbit_results.keys()))
+
+    # Find arc times
+    States_AU = np.linalg.norm(States[:,:3],axis=1)/constants.ASTRONOMICAL_UNIT #AU
+
+    mask = States_AU <= rh
+    idx = np.argmax(mask)
+    Start_arc_time = Times[idx]
+
+    Minimum_obs = len(np.arange(SSE_start_buffer + time_buffer, Start_arc_time, constants.JULIAN_DAY))
 
     Full_observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
     max_observations = len(Full_observation_times)
-    observation_counts = list(range(max_observations, 0, -Observation_step_size))
+    observation_counts = list(range(max_observations, Minimum_obs, -Observation_step_size))
+
+    # Full_observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
+    # max_observations = len(Full_observation_times)
+    # observation_counts = list(range(max_observations, 0, -Observation_step_size))
 
     # ----------------------------------------------------------------------
     # Perform Estimation for each observation campaign
@@ -566,6 +603,7 @@ for body in all_results:
         # ----------------------------------------------------------------------
         print("--------------------------------------------------------------------")
         print("Plotting observations and estimation")
+
         obs = ObsPlot(sim,name, simulated_observations, directory_name, addition)
         obs.RADEC_overtime()
         obs.skyplot()
@@ -621,7 +659,6 @@ for body in all_results:
         samples = np.random.multivariate_normal(trajectory_parameters, initial_covariance, size=Orbit_samples)
         
         dependent_variables_to_save = []
-        subdir = f"{directory_name}/Simulation_{sim}"
         print("--------------------------------------------------------------------")
         print("Performing Monte Carlo")
         for i, sampled_conditions in enumerate(samples):
@@ -662,7 +699,7 @@ for body in all_results:
 
     with open(f"{directory_name}{addition}/Data_NGA_{NGA_Flag}.pkl", "wb") as f:
         pickle.dump(data_to_write, f)
-    with open(f"Coding/W79 Estimation/Sim_data/Data_NGA_{NGA_Flag}.pkl", "wb") as f:
+    with open(f"Coding/W79 Estimation/Sim_data/Data_NGA_{NGA_Flag}_{body}.pkl", "wb") as f:
         pickle.dump(data_to_write, f)
     
     stat = StatPlot(data_to_write,info_dict_synobs,directory_name,addition)

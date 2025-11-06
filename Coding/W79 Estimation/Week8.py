@@ -58,11 +58,11 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 
 # samples
 Orbit_samples = 1000
-Observation_step_size = 40
+Observation_step_size = 20
 np.random.seed(42)
 
 # number of iterations for our estimation
-number_of_pod_iterations = 6
+number_of_pod_iterations = 8
 
 # timestep of 1 hours for our estimation
 timestep_global = 24*3600
@@ -138,7 +138,7 @@ body_settings = environment_setup.get_default_body_settings(
 
 # SBDB_request = Helper_file.sbdb_query(classes,request_filter)
 
-all_results = ["C2001Q4"] #,"C2008A1","C2013US10"]
+all_results = ["C2013US10"] #"C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     # saving dictionary
@@ -208,6 +208,26 @@ for body in all_results:
         print(f"Directory '{directory_name}{addition}' created successfully.")
     except FileExistsError:
         print(f"Directory '{directory_name}{addition}' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Observation")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Observation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Estimation")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Fit_to_Truth")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
+    try:
+        os.mkdir(f"{directory_name}{addition}/Clone_divergence")
+        print(f"Directory '{directory_name}{addition}' created successfully.")
+    except FileExistsError:
+        print(f"Directory '{directory_name}{addition}/Estimation' already exists.")
 
     # ----------------------------------------------------------------------
     # Convert calander dates and JD to Epochs
@@ -221,7 +241,7 @@ for body in all_results:
 
     SSE_tp = time_representation.julian_day_to_seconds_since_epoch(float(Tp))
 
-    SSE_end = SSE_tp
+    SSE_end = SSE_end_cal
 
     SSE_start_buffer = SSE_start - time_buffer
     SSE_end_buffer = SSE_end + time_buffer_end
@@ -504,13 +524,11 @@ for body in all_results:
         return current_custom_parameter_partial
     
     A1,A2,A3 = NGA_array
-    print(NGA_array)
-
     A1 = 2.195*10**-8*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2
     A2 = 0.006*10**-8*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2
     A3 = 0*constants.ASTRONOMICAL_UNIT/constants.JULIAN_DAY**2
+    print(NGA_array)
     A_vec = np.array([A1,A2,A3])
-    print(A_vec)
     custom_parameter = A_vec
 
     def get_custom_parameter():
@@ -552,10 +570,28 @@ for body in all_results:
     # ----------------------------------------------------------------------
     # Define observation campaign
     # ----------------------------------------------------------------------
+    "We want a limited version, from 3 AU until peri so we keep simulating until we reach the mimimum observations at 3AU"
+    rh = 3
+    # Reference orbit
+    States = np.array(list(Reference_orbit_results.values()))
+    Times = np.array(list(Reference_orbit_results.keys()))
+
+    # Find arc times
+    States_AU = np.linalg.norm(States[:,:3],axis=1)/constants.ASTRONOMICAL_UNIT #AU
+
+    mask = States_AU <= rh
+    idx = np.argmax(mask)
+    Start_arc_time = Times[idx]
+
+    Minimum_obs = len(np.arange(SSE_start_buffer + time_buffer, Start_arc_time, constants.JULIAN_DAY))
 
     Full_observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
     max_observations = len(Full_observation_times)
-    observation_counts = list(range(max_observations, 0, -Observation_step_size))
+    observation_counts = list(range(max_observations, Minimum_obs, -Observation_step_size))
+
+    # Full_observation_times = np.arange(SSE_start_buffer + time_buffer, SSE_end_buffer - time_buffer_end, constants.JULIAN_DAY)
+    # max_observations = len(Full_observation_times)
+    # observation_counts = list(range(max_observations, 0, -Observation_step_size))
 
     # ----------------------------------------------------------------------
     # Perform Estimation for each observation campaign
@@ -568,8 +604,7 @@ for body in all_results:
             print(f"\n"\
                 f"Estimating with {n_obs} observations")
             # populate the dictionaries
-
-
+            
             current_times = Full_observation_times[:n_obs]
             observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
                 observable_models_setup.model_settings.angular_position_type,
@@ -756,6 +791,7 @@ for body in all_results:
         print(custom_parameter)
         with open(f"{directory_name}{addition}/Info_syntheticobs.txt", "w") as f:
             pprint.pprint(info_dict_synobs, stream=f, indent=2, width=80, sort_dicts=False)
+        print(custom_parameter)
 
         # ----------------------------------------------------------------------
         # Perform monte carlo
@@ -801,6 +837,9 @@ for body in all_results:
             data_to_write['Montecarlo_trajectory_times'][sim][i] = np.vstack(list(state_hist_sample.keys()))
             data_to_write["observation_times"][sim] = current_times
             data_to_write["NGA_Est"][sim] = NGA_Parameters
+            data_to_write["NGA_JPL"][sim] = NGA_array
+            data_to_write["NGA_Input"][sim] = A_vec
+
 
             data_to_write["Sim_info"][sim] = {
             "Orbit_samples": Orbit_samples,
@@ -822,7 +861,7 @@ for body in all_results:
     
     with open(f"{directory_name}{addition}/Data_NGA_Est.pkl", "wb") as f:
         pickle.dump(data_to_write, f)
-    with open(f"Coding/W79 Estimation/Sim_data/Data_NGA_Est.pkl", "wb") as f:
+    with open(f"Coding/W79 Estimation/Sim_data/Data_NGA_Est_{body}.pkl", "wb") as f:
         pickle.dump(data_to_write, f)
 
     stat = StatPlot(data_to_write,info_dict_synobs,directory_name,addition)

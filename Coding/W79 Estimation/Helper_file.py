@@ -32,7 +32,7 @@ def sbdb_query(classes,request_filter):
 
 def sbdb_query_info(target_body,full_precision=False):
     target_sbdb = SBDBquery(target_body,full_precision=full_precision)
-    print(target_sbdb)
+
     # get body name information
     spkid = target_sbdb['object']['spkid']
     name  = target_sbdb['object']['fullname']
