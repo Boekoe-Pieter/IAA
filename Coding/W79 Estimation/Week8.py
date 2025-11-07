@@ -152,6 +152,7 @@ for body in all_results:
 
         "Estimated_Reference_trajectory":{},
         "Estimated_Reference_trajectory_times":{},
+        "Covariance_matrix":{},
         "NGA_Est":{},
 
         "Montecarlo_trajectory": {},
@@ -702,7 +703,11 @@ for body in all_results:
         data_to_write['Montecarlo_trajectory'].setdefault(sim, {})
         data_to_write['Montecarlo_trajectory_times'].setdefault(sim, {})
         data_to_write['observation_times'].setdefault(sim, {})
+        data_to_write['Covariance_matrix'].setdefault(sim, {})
         data_to_write['NGA_Est'].setdefault(sim, {})
+
+
+
         times = np.arange(SSE_start, SSE_end, timestep_global)
         if not np.isclose(times[-1], SSE_end, rtol=1e-10, atol=1e-10):
             times = np.append(times, SSE_end)
@@ -797,6 +802,8 @@ for body in all_results:
         # Perform monte carlo
         # ----------------------------------------------------------------------
         initial_covariance = covariance_output.covariance
+        data_to_write["Covariance_matrix"][sim] = initial_covariance
+
         initial_state = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
 
         NGA_Parameters = custom_parameter

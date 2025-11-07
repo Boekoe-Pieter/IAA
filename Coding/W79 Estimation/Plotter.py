@@ -11,6 +11,16 @@ from tudatpy import constants
 AU = constants.ASTRONOMICAL_UNIT
 day = constants.JULIAN_DAY
 
+plt.rcParams.update({
+        "font.size": 14,              # Base font size
+        "axes.titlesize": 14,         # Title font size
+        "axes.labelsize": 14,         # X/Y label font size
+        "xtick.labelsize": 12,        # X tick label size
+        "ytick.labelsize": 12,        # Y tick label size
+        "legend.fontsize": 12,        # Legend font size
+        "figure.titlesize": 18        # Figure title size (if using suptitle)
+    })
+
 class Observations_Plotter:
     def __init__(self,sim,name,simulated_observations,directory_name,addition):
         self.sim = sim
@@ -548,18 +558,14 @@ class statistics_plotter:
             ax.add_artist(leg2)
             ax.add_artist(leg3)
 
-            plt.title(f"{n_clones} Monte Carlo samples of comet {info['Name']} — {info['Observations']} observations")
-            plt.savefig(f"{self.saving_dir}/3D_trajectory_worstfit_{N_fit}.pdf", dpi=300)
-            plt.show() 
+            plt.title(f"{n_clones} Monte Carlo samples of comet {info['Name']} — {self.data['Sim_info'][N_fit].get('N_obs')} observations")
+            plt.savefig(f"{self.saving_dir}/3D_trajectory_{N_fit}.pdf", dpi=300)
+            plt.close() 
 
         keys = list(self.data["Estimated_Reference_trajectory"].keys())
-        best_key = keys[0]
-        worst_key = keys[-1]
 
-        best_fit = self.data["Estimated_Reference_trajectory"][best_key]
-        worst_fit = self.data["Estimated_Reference_trajectory"][worst_key]
         for key in keys:
-            plot_ensemble(self.data,self.data["Montecarlo_trajectory"][key],self.data["Estimated_Reference_trajectory"][key],self.info,key, n_clones=self.info['Orbit_clones'])
+            plot_ensemble(self.data,self.data["Montecarlo_trajectory"][key],self.data["Estimated_Reference_trajectory"][key],self.info,key, n_clones=self.data["Sim_info"][key].get("Orbit_samples"))
 
     def boxplot(self, extra_time=15):
         comet = self.info["Name"]

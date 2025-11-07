@@ -14,9 +14,17 @@ from tudatpy import constants
 AU = constants.ASTRONOMICAL_UNIT
 day = constants.JULIAN_DAY
 
+plt.rcParams.update({
+        "font.size": 14,              # Base font size
+        "axes.titlesize": 14,         # Title font size
+        "axes.labelsize": 14,         # X/Y label font size
+        "xtick.labelsize": 12,        # X tick label size
+        "ytick.labelsize": 12,        # Y tick label size
+        "legend.fontsize": 12,        # Legend font size
+        "figure.titlesize": 18        # Figure title size (if using suptitle)
+    })
 
-
-comet_name = "C2013US10"  #"C2001Q4","C2008A1","C2013US10"]
+comet_name = "C2008A1"  #"C2001Q4","C2008A1","C2013US10"]
 
 NGA_True = f"Coding/W79 Estimation/Sim_data/Data_NGA_True_{comet_name}.pkl"
 NGA_Est = f"Coding/W79 Estimation/Sim_data/Data_NGA_Est_{comet_name}.pkl"
@@ -199,7 +207,11 @@ def compute_family(family_dict, data,label):
 
 def boxplot_all(extra_time=15):
     labels = ["True","Est", "Arc"]
-    plot_lables = ["NG Reference", "NG Estimated", "Arcwise"]
+    plot_lables = ["Pure Grav", "NG Estimated", "Pure Grav - Arcwise"]
+    colors = ["tab:blue", "tab:green", "tab:red"]
+    # labels = ["Arc"]
+    # plot_lables = ["Pure Grav - Arcwise"]
+    # colors = ["tab:red"]
     comets = [f"{comet_name}_{label}" for label in labels]
     AU_width = 0.05
     def make_boxplot_multiple(stats,stat_dict_name, ylabel, title, scale=1.0,width=5, save_name=None, xlabel=r"$\Delta{Days}$ to Perihelion"):
@@ -209,8 +221,6 @@ def boxplot_all(extra_time=15):
 
         fig, ax = plt.subplots(figsize=(15, 8))
         spacing = 0  
-
-        colors = ["tab:blue", "tab:green", "tab:red"]
 
         for i, comet in enumerate(comets):
             positions = [x - spacing/2 + i*(spacing/len(labels)) for x in all_keys]
@@ -255,6 +265,63 @@ def boxplot_all(extra_time=15):
         if save_name:
             plt.savefig(f"{save_name}.pdf", dpi=300)
         plt.close()
+
+
+
+    comets = [f"{comet_name}_{label}" for label in labels]
+    def make_error_bar(stats, stat_dict_name, ylabel, title, scale=1.0, width=5,
+                    save_name=None, xlabel=r"$\Delta{Days}$ to Perihelion"):
+        
+        linestyles = ["-","--","-."]
+        comets = [f"{comet_name}_{label}" for label in labels]
+
+        all_keys = sorted(
+            set().union(*[
+                stat_dict.keys()
+                for stat_dict in [stats[stat_dict_name][c]
+                                for c in comets if c in stats[stat_dict_name]]
+            ]),
+            reverse=True
+        )
+        time = np.arange(max(all_keys),min(all_keys)-extra_time,-extra_time)
+
+        fig, ax = plt.subplots(figsize=(15, 8))
+
+        for i, comet in enumerate(comets):
+            positions = np.array(all_keys)
+            data = [np.array(stats[stat_dict_name][comet].get(x, [])) / scale for x in all_keys]
+
+            medians = np.array([np.median(d) if len(d) > 0 else np.nan for d in data])
+            stds = np.array([np.std(d) if len(d) > 0 else np.nan for d in data])
+
+            errorbar = ax.errorbar(positions, medians, yerr=stds,
+                        fmt='o', ms=5, mfc=colors[i], mec=colors[i],
+                        ecolor=colors[i], elinewidth=1.5, capsize=3,
+                        label=plot_lables[i])
+            errorbar[-1][0].set_linestyle(linestyles[i]) #eb1[-1][0] is the LineCollection objects of the errorbar lines
+
+        if isinstance(all_keys[0], (int, float)) and xlabel == r"$\Delta{Days}$ to Perihelion":
+            plt.gca().invert_xaxis()
+            plt.xticks(time, rotation=70)
+
+        if  xlabel == "Distance [AU]":
+            plt.gca().invert_xaxis()
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.set_yscale("log")
+        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.legend(fontsize=12)
+        plt.tight_layout()
+
+        if save_name:
+            plt.savefig(f"{save_name}.pdf", dpi=300)
+        plt.show()
+
+    # ------------------------------------------------------
+    # BOXPLOTS
+    # ------------------------------------------------------
 
     # ------------------------------------------------------
     # Position vs Days
@@ -329,6 +396,88 @@ def boxplot_all(extra_time=15):
     )
 
 
+    # ------------------------------------------------------
+    # ERRORBAR PLOTS
+    # ------------------------------------------------------
+
+    # ------------------------------------------------------
+    # Position vs Days
+    make_error_bar(
+        general_statistics_obs,
+        "Clone_Divergence_Norm_peri_DPERI",
+        ylabel="Clone Position Divergence Norm at perihelion [km]",
+        title="Clone Position Divergence vs. Days to Perihelion\n" \
+        "Median & Standard Deviation",
+        scale=1e3,
+        save_name=f"{saving_dir}/{comet_name}_Stat_Position_ErrorBar_dtPeri_All"
+    )
+    
+    # ------------------------------------------------------
+    # Velocity vs Days
+    make_error_bar(
+        general_statistics_obs,
+        "Clone_Divergence_Vel_Norm_peri_DPERI",
+        ylabel="Clone Velocity Divergence Norm at perihelion [m/s]",
+        title="Clone Velocity Divergence vs. Days to Perihelion\n" \
+        "Median & Standard Deviation",
+        scale=1.0,
+        save_name=f"{saving_dir}/{comet_name}_Stat_Velocity_ErrorBar_dtPeri_All"
+    )
+    
+    # ------------------------------------------------------
+    # Position vs NOBS
+    make_error_bar(
+        general_statistics_obs,
+        "Clone_Divergence_Norm_peri_NOBS",
+        ylabel="Clone Position Divergence Norm at perihelion [km]",
+        title="Clone Position Divergence Norm vs. Number of Observations\n" \
+        "Median & Standard Deviation",
+        scale=1e3,
+        xlabel="Number of Observations",
+        save_name=f"{saving_dir}/{comet_name}_Stat_Position_ErrorBar_NOBS_All"
+    )
+
+    # ------------------------------------------------------
+    # Velocity vs NOBS
+    make_error_bar(
+        general_statistics_obs,
+        "Clone_Divergence_Vel_Norm_peri_NOBS",
+        ylabel="Clone Velocity Divergence Norm at perihelion [m/s]",
+        title="Clone Velocity Divergence Norm vs. Number of Observations\n" \
+        "Median & Standard Deviation",
+        scale=1.0,
+        xlabel="Number of Observations",
+        save_name=f"{saving_dir}/{comet_name}_Stat_Velocity_ErrorBar_NOBS_All"
+    )
+
+    # ------------------------------------------------------
+    # Position vs AU
+    make_error_bar(
+        general_statistics_AU,
+        "Clone_Divergence_Norm_peri_DPERI",
+        ylabel="Clone Position Divergence Norm at perihelion [km]",
+        title="Clone Position Divergence vs. AU from Perihelion\n" \
+        "Median & Standard Deviation",
+        scale=1e3,
+        width = AU_width,
+        xlabel=r"Distance [AU]",
+        save_name=f"{saving_dir}/{comet_name}_Stat_Position_ErrorBar_dAU_All"
+    )
+    
+    # ------------------------------------------------------
+    # Velocity vs AU
+    make_error_bar(
+        general_statistics_AU,
+        "Clone_Divergence_Vel_Norm_peri_DPERI",
+        ylabel="Clone Velocity Divergence Norm at perihelion [m/s]",
+        title="Clone Velocity Divergence vs. AU from Perihelion\n" \
+        "Median & Standard Deviation",
+        scale=1.0,
+        width = AU_width,
+        xlabel=r"Distance [AU]",
+        save_name=f"{saving_dir}/{comet_name}_Stat_Velocity_ErrorBar_dAU_All"
+    )
+
 # compute_family(Family, NGA_False_Data, "False")
 compute_family(Family, NGA_True_Data, "True")
 compute_family(Family, NGA_Est_Data, "Est")
@@ -336,12 +485,8 @@ compute_family(Family, Arcwise_data, "Arc")
 
 boxplot_all()
 
+
 # Make a table for the NGA estimations
-import numpy as np
-from tudatpy.kernel import constants
-
-AU = constants.ASTRONOMICAL_UNIT
-
 def Make_table(data,comet_name):
     target_sbdb = SBDBquery(comet_name,full_precision=True)
     A1 = target_sbdb["orbit"]["model_pars"].get("A1")

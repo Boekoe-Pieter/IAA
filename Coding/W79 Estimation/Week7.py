@@ -57,7 +57,7 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # ----------------------------------------------------------------------
 
 # samples
-Orbit_samples = 5
+Orbit_samples = 1000
 Observation_step_size = 20
 np.random.seed(42)
 
@@ -138,7 +138,7 @@ body_settings = environment_setup.get_default_body_settings(
 
 # SBDB_request = Helper_file.sbdb_query(classes,request_filter)
 
-all_results = ["C2001Q4"] #"C2001Q4","C2008A1","C2013US10"]
+all_results = ["C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     # saving dictionary
@@ -152,6 +152,7 @@ for body in all_results:
 
         "Estimated_Reference_trajectory":{},
         "Estimated_Reference_trajectory_times":{},
+        "Covariance_matrix":{},
 
         "Montecarlo_trajectory": {},
         "Montecarlo_trajectory_times": {},
@@ -434,7 +435,7 @@ for body in all_results:
     # ----------------------------------------------------------------------
     # Define observation campaign
     # ----------------------------------------------------------------------
-    "We want a limited version, from 3 AU until peri so we keep simulating until we reach the mimimum observations at 3AU"
+    # "We want a limited version, from 3 AU until peri so we keep simulating until we reach the mimimum observations at 3AU"
     rh = 3
     # Reference orbit
     States = np.array(list(Reference_orbit_results.values()))
@@ -471,6 +472,7 @@ for body in all_results:
         data_to_write['Montecarlo_trajectory'].setdefault(sim, {})
         data_to_write['Montecarlo_trajectory_times'].setdefault(sim, {})
         data_to_write['observation_times'].setdefault(sim, {})
+        data_to_write["Covariance_matrix"].setdefault(sim, {})
 
         current_times = Full_observation_times[:n_obs]
         observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
@@ -653,6 +655,8 @@ for body in all_results:
         # Perform monte carlo
         # ----------------------------------------------------------------------
         initial_covariance = covariance_output.covariance
+        data_to_write["Covariance_matrix"][sim] = initial_covariance
+
         initial_state = bodies.get(str(spkid)).ephemeris.cartesian_state(SSE_start)
 
         trajectory_parameters = initial_state.copy()

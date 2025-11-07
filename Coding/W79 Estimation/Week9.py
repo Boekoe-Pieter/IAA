@@ -58,13 +58,12 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # ----------------------------------------------------------------------
 
 # changables
-Observation_step_size = 165 #days
-
+samples_per_day = 1
 rh = 3.0           #AU, start arc
-arclength = -0.5   #AU
-rh_stop = 1.0
+arclength = -1.5   #AU
+rh_stop = 1.5
 
-Orbit_samples = 100
+Orbit_samples = 1000
 np.random.seed(42)
 
 # number of iterations for our estimation
@@ -143,7 +142,7 @@ body_settings = environment_setup.get_default_body_settings(
 
 # SBDB_request = Helper_file.sbdb_query(classes,request_filter)
 
-all_results = ["C2001Q4"] #"C2001Q4","C2008A1","C2013US10"]
+all_results = ["C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     # saving dictionary
@@ -384,7 +383,7 @@ for body in all_results:
     Times = np.array(list(Reference_orbit_results.keys()))
 
     # define arcs
-    arcs = np.arange(rh,rh_stop,arclength)
+    arcs = np.arange(rh,rh_stop+arclength,arclength)
 
     # Find arc times
     States_AU = np.linalg.norm(States[:,:3],axis=1)/constants.ASTRONOMICAL_UNIT #AU
@@ -419,7 +418,7 @@ for body in all_results:
         start_arc_time_buffer = start_arc_time - time_buffer
         end_arc_time_buffer = end_arc_time + time_buffer
 
-        current_times = np.arange(start_arc_time,end_arc_time,constants.JULIAN_DAY)
+        current_times = np.arange(start_arc_time,end_arc_time,constants.JULIAN_DAY/samples_per_day)
         n_obs = len(current_times)
 
         print(f"\n"\
