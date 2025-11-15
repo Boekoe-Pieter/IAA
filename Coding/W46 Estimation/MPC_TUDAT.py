@@ -58,7 +58,7 @@ global_frame_orientation = "J2000"
 
 # ----------------------------------------------------------------------
 # Retrieve data from SBDB
-target_mpc_code = "C/2001 Q4"
+target_mpc_code = "C/2025 N1"
 
 target_sbdb = SBDBquery(target_mpc_code)
 
@@ -288,113 +288,121 @@ pod_input.define_estimation_settings(reintegrate_variational_equations=True)
 # Perform the estimation
 pod_output = estimator.perform_estimation(pod_input)
 
-# retrieve the estimated initial state.
-results_final = pod_output.parameter_history[:, -1]
 
-vector_error_initial = (np.array(initial_guess) - initial_states)[0:3]
-error_magnitude_initial = np.sqrt(np.square(vector_error_initial).sum()) / 1000
+# Try some of the other projections: 'hammer', 'mollweide' and 'lambert'
+fig = batch.plot_observations_sky(projection="aitoff")
+# specific objects can be selected for large batches:
+fig = batch.plot_observations_sky(projection=None, objects=[329])
 
-vector_error_final = (np.array(results_final) - initial_states)[0:3]
-error_magnitude_final = np.sqrt(np.square(vector_error_final).sum()) / 1000
-
-print(
-    f"{name} initial guess radial error to spice: {round(error_magnitude_initial, 2)} km"
-)
-print(
-    f"{name} final radial error to spice: {round(error_magnitude_final, 2)} km"
-)
-
-residual_history = pod_output.residual_history
-
-# Number of columns and rows for our plot
-number_of_columns = 2
-
-number_of_rows = (
-    int(number_of_pod_iterations / number_of_columns)
-    if number_of_pod_iterations % number_of_columns == 0
-    else int((number_of_pod_iterations + 1) / number_of_columns)
-)
-
-fig, axs = plt.subplots(
-    number_of_rows,
-    number_of_columns,
-    figsize=(9, 3.5 * number_of_rows),
-    sharex=True,
-    sharey=False,
-)
-
-# We cheat a little to get an approximate year out of our times (which are in seconds since J2000)
-residual_times = (
-    np.array(observation_collection.concatenated_times) / (86400 * 365.25) + 2000
-)
-
-# plot the residuals, split between RA and DEC types
-for idx, ax in enumerate(fig.get_axes()):
-    ax.grid()
-    # we take every second
-    ax.scatter(
-        residual_times[::2],
-        residual_history[
-            ::2,
-            idx,
-        ],
-        marker="+",
-        s=60,
-        label="Right Ascension",
-    )
-    ax.scatter(
-        residual_times[1::2],
-        residual_history[
-            1::2,
-            idx,
-        ],
-        marker="+",
-        s=60,
-        label="Declination",
-    )
-    ax.set_ylabel("Observation Residual [rad]")
-    ax.set_title("Iteration " + str(idx + 1))
-
-plt.tight_layout()
-
-# add the year label for the x-axis
-for col in range(number_of_columns):
-    axs[int(number_of_rows - 1), col].set_xlabel("Year")
-
-axs[0, 0].legend()
-
-plt.savefig("residuals")
 plt.show()
 
-# Correlation can be retrieved using the CovarianceAnalysisInput class:
-covariance_input = estimation.CovarianceAnalysisInput(observation_collection)
-covariance_output = estimator.compute_covariance(covariance_input)
+# # retrieve the estimated initial state.
+# results_final = pod_output.parameter_history[:, -1]
 
-correlations = covariance_output.correlations
-estimated_param_names = ["x", "y", "z", "vx", "vy", "vz"]
+# vector_error_initial = (np.array(initial_guess) - initial_states)[0:3]
+# error_magnitude_initial = np.sqrt(np.square(vector_error_initial).sum()) / 1000
+
+# vector_error_final = (np.array(results_final) - initial_states)[0:3]
+# error_magnitude_final = np.sqrt(np.square(vector_error_final).sum()) / 1000
+
+# print(
+#     f"{name} initial guess radial error to spice: {round(error_magnitude_initial, 2)} km"
+# )
+# print(
+#     f"{name} final radial error to spice: {round(error_magnitude_final, 2)} km"
+# )
+
+# residual_history = pod_output.residual_history
+
+# # Number of columns and rows for our plot
+# number_of_columns = 2
+
+# number_of_rows = (
+#     int(number_of_pod_iterations / number_of_columns)
+#     if number_of_pod_iterations % number_of_columns == 0
+#     else int((number_of_pod_iterations + 1) / number_of_columns)
+# )
+
+# fig, axs = plt.subplots(
+#     number_of_rows,
+#     number_of_columns,
+#     figsize=(9, 3.5 * number_of_rows),
+#     sharex=True,
+#     sharey=False,
+# )
+
+# # We cheat a little to get an approximate year out of our times (which are in seconds since J2000)
+# residual_times = (
+#     np.array(observation_collection.concatenated_times) / (86400 * 365.25) + 2000
+# )
+
+# # plot the residuals, split between RA and DEC types
+# for idx, ax in enumerate(fig.get_axes()):
+#     ax.grid()
+#     # we take every second
+#     ax.scatter(
+#         residual_times[::2],
+#         residual_history[
+#             ::2,
+#             idx,
+#         ],
+#         marker="+",
+#         s=60,
+#         label="Right Ascension",
+#     )
+#     ax.scatter(
+#         residual_times[1::2],
+#         residual_history[
+#             1::2,
+#             idx,
+#         ],
+#         marker="+",
+#         s=60,
+#         label="Declination",
+#     )
+#     ax.set_ylabel("Observation Residual [rad]")
+#     ax.set_title("Iteration " + str(idx + 1))
+
+# plt.tight_layout()
+
+# # add the year label for the x-axis
+# for col in range(number_of_columns):
+#     axs[int(number_of_rows - 1), col].set_xlabel("Year")
+
+# axs[0, 0].legend()
+
+# plt.savefig("residuals")
+# plt.show()
+
+# # Correlation can be retrieved using the CovarianceAnalysisInput class:
+# covariance_input = estimation.CovarianceAnalysisInput(observation_collection)
+# covariance_output = estimator.compute_covariance(covariance_input)
+
+# correlations = covariance_output.correlations
+# estimated_param_names = ["x", "y", "z", "vx", "vy", "vz"]
 
 
-fig, ax = plt.subplots(1, 1, figsize=(9, 7))
+# fig, ax = plt.subplots(1, 1, figsize=(9, 7))
 
-im = ax.imshow(correlations, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
+# im = ax.imshow(correlations, cmap=cm.RdYlBu_r, vmin=-1, vmax=1)
 
-ax.set_xticks(np.arange(len(estimated_param_names)), labels=estimated_param_names)
-ax.set_yticks(np.arange(len(estimated_param_names)), labels=estimated_param_names)
+# ax.set_xticks(np.arange(len(estimated_param_names)), labels=estimated_param_names)
+# ax.set_yticks(np.arange(len(estimated_param_names)), labels=estimated_param_names)
 
-# add numbers to each of the boxes
-for i in range(len(estimated_param_names)):
-    for j in range(len(estimated_param_names)):
-        text = ax.text(
-            j, i, round(correlations[i, j], 2), ha="center", va="center", color="w"
-        )
+# # add numbers to each of the boxes
+# for i in range(len(estimated_param_names)):
+#     for j in range(len(estimated_param_names)):
+#         text = ax.text(
+#             j, i, round(correlations[i, j], 2), ha="center", va="center", color="w"
+#         )
 
-cb = plt.colorbar(im)
+# cb = plt.colorbar(im)
 
-ax.set_xlabel("Estimated Parameter")
-ax.set_ylabel("Estimated Parameter")
+# ax.set_xlabel("Estimated Parameter")
+# ax.set_ylabel("Estimated Parameter")
 
-fig.suptitle(f"Correlations for estimated parameters for {name}")
+# fig.suptitle(f"Correlations for estimated parameters for {name}")
 
-fig.set_tight_layout(True)
-plt.savefig("Covar")
-plt.show()
+# fig.set_tight_layout(True)
+# plt.savefig("Covar")
+# plt.show()

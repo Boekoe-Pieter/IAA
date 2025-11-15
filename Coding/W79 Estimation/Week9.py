@@ -60,7 +60,7 @@ spice.load_kernel("Coding/Spice_files/plu060.bsp")
 # changables
 samples_per_day = 1
 rh = 3.0           #AU, start arc
-arclength = -1.5   #AU
+arclength = -0.5   #AU
 rh_stop = 1.5
 
 Orbit_samples = 1000

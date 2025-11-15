@@ -138,7 +138,7 @@ body_settings = environment_setup.get_default_body_settings(
 
 # SBDB_request = Helper_file.sbdb_query(classes,request_filter)
 
-all_results = ["C2013US10"] #"C2001Q4","C2008A1","C2013US10"]
+all_results = ["C2001Q4","C2008A1","C2013US10"] #"C2001Q4","C2008A1","C2013US10"]
 
 for body in all_results:
     # saving dictionary
@@ -154,6 +154,8 @@ for body in all_results:
         "Estimated_Reference_trajectory_times":{},
         "Covariance_matrix":{},
         "NGA_Est":{},
+        "NGA_JPL":{},
+        "NGA_Input":{},
 
         "Montecarlo_trajectory": {},
         "Montecarlo_trajectory_times": {},
@@ -242,7 +244,7 @@ for body in all_results:
 
     SSE_tp = time_representation.julian_day_to_seconds_since_epoch(float(Tp))
 
-    SSE_end = SSE_end_cal
+    SSE_end = SSE_tp
 
     SSE_start_buffer = SSE_start - time_buffer
     SSE_end_buffer = SSE_end + time_buffer_end
@@ -604,8 +606,7 @@ for body in all_results:
         try:
             print(f"\n"\
                 f"Estimating with {n_obs} observations")
-            # populate the dictionaries
-            
+            # populate the dictionaries  
             current_times = Full_observation_times[:n_obs]
             observation_simulation_settings_RADEC = observations_setup.observations_simulation_settings.tabulated_simulation_settings(
                 observable_models_setup.model_settings.angular_position_type,
@@ -705,7 +706,8 @@ for body in all_results:
         data_to_write['observation_times'].setdefault(sim, {})
         data_to_write['Covariance_matrix'].setdefault(sim, {})
         data_to_write['NGA_Est'].setdefault(sim, {})
-
+        data_to_write['NGA_JPL'].setdefault(sim, {})
+        data_to_write['NGA_Input'].setdefault(sim, {})
 
 
         times = np.arange(SSE_start, SSE_end, timestep_global)

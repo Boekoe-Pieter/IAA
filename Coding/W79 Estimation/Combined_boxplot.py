@@ -24,7 +24,7 @@ plt.rcParams.update({
         "figure.titlesize": 18        # Figure title size (if using suptitle)
     })
 
-comet_name = "C2008A1"  #"C2001Q4","C2008A1","C2013US10"]
+comet_name = "C2013US10"  #"C2001Q4","C2008A1","C2013US10"]
 
 NGA_True = f"Coding/W79 Estimation/Sim_data/Data_NGA_True_{comet_name}.pkl"
 NGA_Est = f"Coding/W79 Estimation/Sim_data/Data_NGA_Est_{comet_name}.pkl"
